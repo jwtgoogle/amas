@@ -78,8 +78,11 @@ class AXML:
                         self.content[name] = value
                 elif "permission" in tag:
                     for i in range(0, int(self.parser.getAttributeCount())):
+                        name = self.parser.getAttributeName(i)
                         value = self._escape(self.getAttributeValue(i))
-                        self.permissions.add(value)
+                        if name == "name":
+                            self.permissions.add(value)
+                            break
                 elif tag == "application":
                     for i in range(0, int(self.parser.getAttributeCount())):
                         name = self.parser.getAttributeName(i)
