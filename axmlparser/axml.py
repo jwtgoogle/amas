@@ -13,6 +13,7 @@
 # limitations under the License.from xml.dom import minidom
 from xml.sax.saxutils import escape
 from struct import pack, unpack
+from xml.dom import minidom
 
 from .apk import AXMLParser
 from .data import *
@@ -95,6 +96,7 @@ class AXML:
                     for i in range(0, int(self.parser.getAttributeCount())):
                         name = self.parser.getAttributeName(i)
                         value = self._escape(self.getAttributeValue(i))
+                        # print(name)
                         if name == "name":
                             tagName = value
                             self.activities.append(value)

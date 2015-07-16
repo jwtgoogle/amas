@@ -49,6 +49,7 @@ def main(arg):
         if arg.endswith("xml"):
             axml = AXML(open(arg, "rb").read())
             axml.printAll()
+            # print(axml.get_xml_obj().toprettyxml())
         else:
             try:
                 with zipfile.ZipFile(arg, 'r') as z:

@@ -31,6 +31,8 @@ from .data import *
 
 UTF8_FLAG = 0x00000100
 
+DEBUG = True
+
 
 class StringBlock:
 
@@ -50,6 +52,17 @@ class StringBlock:
         self.stringsOffset = unpack('<i', buff.read(4))[0]
         self.stylesOffset = unpack('<i', buff.read(4))[0]
 
+        if DEBUG:
+            print("header_size", self.header_size)
+            print("header", self.header)
+            print("chunkSize", self.chunkSize)
+            print("stringCount", self.stringCount)
+            print("styleOffsetCount", self.styleOffsetCount)
+            print("flags", self.flags)
+            print("isUTF8", self.m_isUTF8)
+            print("stringsOffset", self.stringsOffset)
+            print("stylesOffset", self.stylesOffset)
+
         self.m_stringOffsets = []
         self.m_styleOffsets = []
         self.m_strings = []
@@ -62,19 +75,27 @@ class StringBlock:
             self.m_styleOffsets.append(unpack('<i', buff.read(4))[0])
 
         size = self.chunkSize - self.stringsOffset
-        if self.stylesOffset != 0:
-            size = self.stylesOffset - self.stringsOffset
+
+        if self.styleOffsetCount != 0 and self.stylesOffset != 0:
+                    size = self.stylesOffset - self.stringsOffset
+
+        # FIXME 如果这个地方的大小有问题的话，后续怎么处理比较好
+        # 跳过去？
 
         if (size % 4) != 0:
-            traceback.print_exc()
+            pass
+            # traceback.print_exc()
 
         for i in range(0, size):
             self.m_strings.append(unpack('=b', buff.read(1))[0])
 
-        if self.stylesOffset != 0:
+        if self.styleOffsetCount != 0 and self.stylesOffset != 0:
             size = self.chunkSize - self.stylesOffset
 
+            # FIXME 如果这个地方的大小有问题的话，后续怎么处理比较好
             if (size % 4) != 0:
+                print(size)
+                # pass
                 traceback.print_exc()
 
             for i in range(0, size / 4):
