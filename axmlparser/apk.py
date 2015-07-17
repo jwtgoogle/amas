@@ -31,7 +31,7 @@ from .data import *
 
 UTF8_FLAG = 0x00000100
 
-DEBUG = True
+DEBUG = False
 
 
 class StringBlock:
