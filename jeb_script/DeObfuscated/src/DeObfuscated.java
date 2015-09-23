@@ -12,7 +12,7 @@ import java.util.Random;
  * from : https://github.com/CunningLogic/myJEBPlugins
  * DeObfuscated:
  * Plugin that renames classes/fields/methods from non-latin names to easier to read names
- *
+ * <p/>
  * Modify By Lai
  */
 public class DeObfuscated implements IScript {
