@@ -65,7 +65,8 @@ def processZipFile(z, prefix=""):
             if DEBUG:
                 print(name, data[:4], magic_number)
             if magic_number in MAGIC_HEADERS.keys():
-                files_list.append(prefix + name + " " + MAGIC_HEADERS[magic_number])
+                files_list.append(prefix + name + " " +
+                                  MAGIC_HEADERS[magic_number])
                 if MAGIC_HEADERS[magic_number] == 'ZIP':
                     readZip(name + "/", data)
 
