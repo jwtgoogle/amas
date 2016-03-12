@@ -41,7 +41,6 @@ class IRBlock:
         self.delay_consts = parent.opts.delay_consts
         self.pos = pos
         self.instructions = [ir.Label(pos)]
-        self.except_labels = None
 
     def add(self, jvm_instr):
         self.instructions.append(jvm_instr)
@@ -59,7 +58,7 @@ class IRBlock:
 
     def ldc(self, index):
         if index < 256:
-            self.add(ir.OtherConstant(bytecode=struct.pack('>BB', LDC, index)))
+            self.add(ir.OtherConstant(bytecode=bytes([LDC, index])))
         else:
             self.add(ir.OtherConstant(bytecode=struct.pack('>BH', LDC_W, index)))
 
@@ -130,9 +129,6 @@ class IRBlock:
         for bytecode in next(gen):
             self._other(bytecode)
 
-    def new(self, desc):
-        self.u8u16(NEW, self.pool.class_(desc))
-
     def newarray(self, desc):
         if desc in _newArrayCodes:
             self.u8u8(NEWARRAY, _newArrayCodes[desc])
@@ -164,22 +160,20 @@ class IRBlock:
         else:
             self.goto(default)
 
-    def addExceptLabels(self):
-        if self.except_labels is None:
-            s_ind = 0
-            e_ind = len(self.instructions)
-            # assume only Other instructions can throw
-            while s_ind < e_ind and not isinstance(self.instructions[s_ind], ir.Other):
-                s_ind += 1
-            while s_ind < e_ind and not isinstance(self.instructions[e_ind-1], ir.Other):
-                e_ind -= 1
+    def generateExceptLabels(self):
+        s_ind = 0
+        e_ind = len(self.instructions)
+        # assume only Other instructions can throw
+        while s_ind < e_ind and not isinstance(self.instructions[s_ind], ir.Other):
+            s_ind += 1
+        while s_ind < e_ind and not isinstance(self.instructions[e_ind-1], ir.Other):
+            e_ind -= 1
 
-            assert(s_ind < e_ind)
-            if s_ind < e_ind:
-                self.except_labels = start_lbl, end_lbl = ir.Label(), ir.Label()
-                self.instructions.insert(s_ind, start_lbl)
-                self.instructions.insert(e_ind+1, end_lbl)
-        return self.except_labels
+        assert(s_ind < e_ind)
+        start_lbl, end_lbl = ir.Label(), ir.Label()
+        self.instructions.insert(s_ind, start_lbl)
+        self.instructions.insert(e_ind+1, end_lbl)
+        return start_lbl, end_lbl
 
 class IRWriter:
     def __init__(self, pool, method, types, opts):
@@ -268,10 +262,6 @@ class IRWriter:
 def visitNop(method, dex, instr_d, type_data, block, instr):
     pass
 
-def visitMoveResult(method, dex, instr_d, type_data, block, instr):
-    st = scalars.fromDesc(instr.prev_result)
-    block.store(instr.args[0], st)
-
 def visitMove(method, dex, instr_d, type_data, block, instr):
     for st in (scalars.INT, scalars.OBJ, scalars.FLOAT):
         if st & type_data.prims[instr.args[1]]:
@@ -283,6 +273,10 @@ def visitMoveWide(method, dex, instr_d, type_data, block, instr):
         if st & type_data.prims[instr.args[1]]:
             block.load(instr.args[1], st)
             block.store(instr.args[0], st)
+
+def visitMoveResult(method, dex, instr_d, type_data, block, instr):
+    st = scalars.fromDesc(instr.prev_result)
+    block.store(instr.args[0], st)
 
 def visitReturn(method, dex, instr_d, type_data, block, instr):
     if method.id.return_type == b'V':
@@ -299,7 +293,7 @@ def visitConst32(method, dex, instr_d, type_data, block, instr):
     block.const(val, scalars.FLOAT)
     block.store(instr.args[0], scalars.FLOAT)
     if not val:
-        block.const(val, scalars.OBJ)
+        block.const_null()
         block.store(instr.args[0], scalars.OBJ)
 
 def visitConst64(method, dex, instr_d, type_data, block, instr):
@@ -342,7 +336,7 @@ def visitArrayLen(method, dex, instr_d, type_data, block, instr):
     block.store(instr.args[0], scalars.INT)
 
 def visitNewInstance(method, dex, instr_d, type_data, block, instr):
-    block.new(dex.clsType(instr.args[1]))
+    block.u8u16(NEW, block.pool.class_(dex.clsType(instr.args[1])))
     block.store(instr.args[0], scalars.OBJ)
 
 def visitNewArray(method, dex, instr_d, type_data, block, instr):
@@ -358,7 +352,7 @@ def visitFilledNewArray(method, dex, instr_d, type_data, block, instr):
     op = _arrStoreOps.get(elet, AASTORE)
     cbs = [partial(block.load, reg, st) for reg in regs]
     # if not followed by move-result, don't leave it on the stack
-    mustpop = not isinstance(instr_d.get(instr.pos2), dalvik.MoveResult)
+    mustpop = instr_d.get(instr.pos2).type != dalvik.MoveResult
     block.fillarraysub(op, cbs, pop=mustpop)
 
 def visitFillArrayData(method, dex, instr_d, type_data, block, instr):
@@ -455,7 +449,7 @@ def visitInstanceGet(method, dex, instr_d, type_data, block, instr):
     field_id = dex.field_id(instr.args[2])
     st = scalars.fromDesc(field_id.desc)
     block.load(instr.args[1], scalars.OBJ, clsname=field_id.cname)
-    block.u8u16(GETFIELD, block.pool.field(*field_id.triple()))
+    block.u8u16(GETFIELD, block.pool.field(field_id.triple()))
     block.store(instr.args[0], st)
 
 def visitInstancePut(method, dex, instr_d, type_data, block, instr):
@@ -463,22 +457,22 @@ def visitInstancePut(method, dex, instr_d, type_data, block, instr):
     st = scalars.fromDesc(field_id.desc)
     block.load(instr.args[1], scalars.OBJ, clsname=field_id.cname)
     block.load(instr.args[0], st, desc=field_id.desc)
-    block.u8u16(PUTFIELD, block.pool.field(*field_id.triple()))
+    block.u8u16(PUTFIELD, block.pool.field(field_id.triple()))
 
 def visitStaticGet(method, dex, instr_d, type_data, block, instr):
     field_id = dex.field_id(instr.args[1])
     st = scalars.fromDesc(field_id.desc)
-    block.u8u16(GETSTATIC, block.pool.field(*field_id.triple()))
+    block.u8u16(GETSTATIC, block.pool.field(field_id.triple()))
     block.store(instr.args[0], st)
 
 def visitStaticPut(method, dex, instr_d, type_data, block, instr):
     field_id = dex.field_id(instr.args[1])
     st = scalars.fromDesc(field_id.desc)
     block.load(instr.args[0], st, desc=field_id.desc)
-    block.u8u16(PUTSTATIC, block.pool.field(*field_id.triple()))
+    block.u8u16(PUTSTATIC, block.pool.field(field_id.triple()))
 
 def visitInvoke(method, dex, instr_d, type_data, block, instr):
-    isstatic = isinstance(instr, dalvik.InvokeStatic)
+    isstatic = instr.type == dalvik.InvokeStatic
 
     called_id = dex.method_id(instr.args[0])
     sts = scalars.paramTypes(called_id, static=isstatic)
@@ -494,16 +488,15 @@ def visitInvoke(method, dex, instr_d, type_data, block, instr):
         dalvik.InvokeDirect: INVOKESPECIAL,
         dalvik.InvokeStatic: INVOKESTATIC,
         dalvik.InvokeInterface: INVOKEINTERFACE,
-    }[type(instr)]
+    }[instr.type]
 
-    if isinstance(instr, dalvik.InvokeInterface):
-        count = len(called_id.getSpacedParamTypes(False))
-        block.u8u16u8u8(op, block.pool.imethod(*called_id.triple()), count, 0)
+    if instr.type == dalvik.InvokeInterface:
+        block.u8u16u8u8(op, block.pool.imethod(called_id.triple()), len(descs), 0)
     else:
-        block.u8u16(op, block.pool.method(*called_id.triple()))
+        block.u8u16(op, block.pool.method(called_id.triple()))
 
     # check if we need to pop result instead of leaving on stack
-    if not isinstance(instr_d.get(instr.pos2), dalvik.MoveResult):
+    if instr_d.get(instr.pos2).type != dalvik.MoveResult:
         if called_id.return_type != b'V':
             st = scalars.fromDesc(called_id.return_type)
             block.u8(POP2 if scalars.iswide(st) else POP)
@@ -600,20 +593,20 @@ def writeBytecode(pool, method, opts):
             continue
         type_data = types[instr.pos]
         block = writer.createBlock(instr)
-        VISIT_FUNCS[type(instr)](method, dex, instr_d, type_data, block, instr)
+        VISIT_FUNCS[instr.type](method, dex, instr_d, type_data, block, instr)
 
     for instr in sorted(all_handlers, key=lambda instr: instr.pos):
         assert(all_handlers[instr])
         if instr.pos not in types: # skip unreachable instructions
             continue
 
-        start, end = writer.iblocks[instr.pos].addExceptLabels()
+        start, end = writer.iblocks[instr.pos].generateExceptLabels()
         writer.except_starts.add(start)
         writer.except_ends.add(end)
 
         for ctype, handler_pos in all_handlers[instr]:
             # If handler doesn't use the caught exception, we need to redirect to a pop instead
-            if not isinstance(instr_d.get(handler_pos), dalvik.MoveResult):
+            if instr_d.get(handler_pos).type != dalvik.MoveResult:
                 target = writer.addExceptionRedirect(handler_pos)
             else:
                 target = writer.labels[handler_pos]

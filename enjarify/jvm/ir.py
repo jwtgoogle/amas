@@ -178,11 +178,13 @@ class Switch(JvmInstruction):
         assert(jumps)
         self.low = min(jumps)
         self.high = max(jumps)
-        self.table_size = self.high - self.low + 1
-        self.jump_size = len(jumps)
-        self.nopad_size = 9 + min(8*self.jump_size, 4*(self.table_size+1))
-        self.istable = 8*self.jump_size > 4*(self.table_size+1)
 
+        table_count = self.high - self.low + 1
+        table_size =  4*(table_count+1)
+        jump_size = 8*len(jumps)
+
+        self.istable = jump_size > table_size
+        self.nopad_size = 9 + (table_size if self.istable else jump_size)
         self.max = self.nopad_size + 3
 
     def fallsthrough(self): return False
@@ -193,20 +195,20 @@ class Switch(JvmInstruction):
         offset = posd[labels[self.default]] - pos
         pad = (-pos-1) % 4
 
-        parts = []
+        bytecode = bytearray()
         if self.istable:
-            parts.append(bytes([TABLESWITCH] + [0]*pad))
-            parts.append(struct.pack('>iii', offset, self.low, self.high))
+            bytecode += bytes([TABLESWITCH] + [0]*pad)
+            bytecode += struct.pack('>iii', offset, self.low, self.high)
             for k in range(self.low, self.high + 1):
                 target = self.jumps.get(k, self.default)
-                parts.append(struct.pack('>i', posd[labels[target]] - pos))
+                bytecode += struct.pack('>i', posd[labels[target]] - pos)
         else:
-            parts.append(bytes([LOOKUPSWITCH] + [0]*pad))
-            parts.append(struct.pack('>iI', offset, len(self.jumps)))
+            bytecode += bytes([LOOKUPSWITCH] + [0]*pad)
+            bytecode += struct.pack('>iI', offset, len(self.jumps))
             for k, target in sorted(self.jumps.items()):
                 offset = posd[labels[target]] - pos
-                parts.append(struct.pack('>ii', k, offset))
-        self.bytecode = b''.join(parts)
+                bytecode += struct.pack('>ii', k, offset)
+        self.bytecode = bytes(bytecode)
 
 _return_or_throw_bytecodes = {bytes([op]) for op in range(IRETURN, RETURN+1) }
 _return_or_throw_bytecodes.add(bytes([ATHROW]))

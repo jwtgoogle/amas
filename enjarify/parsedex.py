@@ -222,7 +222,6 @@ class DexClass:
                 constant_vals = [encodedValue(self.dex, stream) for _ in range(size)]
                 for field, val in zip(self.data.fields, constant_vals):
                     field.constant_value = val
-        return self.data
 
 class SizeOff:
     def __init__(self, stream):
@@ -255,7 +254,7 @@ class DexFile:
         self.method_ids = SizeOff(stream)
         self.class_defs = SizeOff(stream)
         self.data = SizeOff(stream)
-        
+
         defs = self.class_defs
         self.classes = []
         for i in range(defs.size):

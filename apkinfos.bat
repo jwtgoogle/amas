@@ -1,6 +1,6 @@
 @echo off
 
-REM  Copyright 2015 Google Inc. All Rights Reserved.
+REM  Copyright 2016 acgmohu@gmail.com. All Rights Reserved.
 REM
 REM  Licensed under the Apache License, Version 2.0 (the "License");
 REM  you may not use this file except in compliance with the License.
@@ -15,4 +15,4 @@ REM  See the License for the specific language governing permissions and
 REM  limitations under the License.
 
 set PYTHONPATH=%~dp0
-python3 -O -m main.apkinfos %*
+python -O -m main.apkinfos %*

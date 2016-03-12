@@ -20,6 +20,7 @@
 
 import sys
 from optparse import OptionParser
+import zipfile
 
 from . import axml
 
@@ -41,13 +42,22 @@ def main(options, arguments):
     if options.input is not None:
         buff = ""
 
+
         if ".xml" in options.input:
             ap = axml.AXML(open(options.input, "rb").read())
             buff = ap.get_xml_obj().toprettyxml()
         else:
-            print("Unknown file type")
-            return
+            with zipfile.ZipFile(options.input, 'r') as z:
+                for name in z.namelist():
+                    try:
+                        data = z.read(name)
+                    except RuntimeError as err:
+                        print(prefix, name, err)
+                        continue
 
+                    if name == "AndroidManifest.xml":
+                        ap = axml.AXML(data)
+                        buff = ap.get_xml_obj().toprettyxml()
         if options.output is not None:
             fd = open(options.output, "w")
             fd.write(buff)

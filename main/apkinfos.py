@@ -1,4 +1,4 @@
-# Copyright 2015 LAI. All Rights Reserved.
+# Copyright 2015 acgmohu@gmail.com. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,13 +18,12 @@ import os
 import os.path
 import binascii
 import io
-import struct
 
 from axmlparser.axml import AXML
 
 DEBUG = False
 MAGIC_HEADERS = {b'504b0304': 'ZIP', b'7f454c46': 'ELF'}
-AXML_MAGIC_HEADER = b'03000800'
+AXML_MAGIC_HEADERS = [b'03000800', b'00000800']
 files_list = []
 
 
@@ -52,7 +51,8 @@ def processZipFile(z, prefix=""):
             continue
 
         magic_number = binascii.hexlify(data[:4])
-        if name == "AndroidManifest.xml" and magic_number == AXML_MAGIC_HEADER:
+
+        if name == "AndroidManifest.xml" and magic_number in AXML_MAGIC_HEADERS:
             # try:
             a = AXML(data)
             if prefix != "":
@@ -78,34 +78,16 @@ def main(arg):
                 filePath = os.path.join(parent, filename)
                 print(filePath)
 
-                if filePath.endswith("xml"):
-                    axml = AXML(open(filePath, "rb").read())
-                    axml.printAll()
-                    print('\n')
-                    continue
-
                 try:
                     with zipfile.ZipFile(filePath, 'r') as z:
                         processZipFile(z)
-                        displayFiles()
+                        # displayFiles()
                 except zipfile.BadZipFile as err:
                     print(filePath, err)
 
-    else:
-        if arg.endswith("xml"):
-            axml = AXML(open(arg, "rb").read())
-            axml.printAll()
-            # print(axml.get_xml_obj().toprettyxml())
-        else:
-            try:
-                with zipfile.ZipFile(arg, 'r') as z:
-                    processZipFile(z)
-            except zipfile.BadZipFile as err:
-                print(filePath, err)
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog='axmlinfos', description='获取apk信息（支持目录、文件）')
+        prog='axmlinfos', description='获取APK的整体信息，包含清单、文件。')
     parser.add_argument('dirName')
     args = parser.parse_args()
     main(args.dirName)

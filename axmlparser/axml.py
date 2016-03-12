@@ -35,7 +35,8 @@ class AXML:
 
         self.receivers = {}  # { rev : actions }
         self.services = {}  # { ser : actions }
-        actions = []
+        self.actions = set()
+        action_list = []
 
         whichTag = -1
         tagName = ""
@@ -119,7 +120,10 @@ class AXML:
                 elif tag == "action":
                     if whichTag == ACT:
                         for i in range(0, int(self.parser.getAttributeCount())):
+                            name = self.parser.getAttributeName(i)
                             value = self._escape(self.getAttributeValue(i))
+                            if name == "name":
+                                self.actions.add(value)
                             if value == "android.intent.action.MAIN":
                                 mainFlag += 1
                     elif whichTag == REV or whichTag == SER:
@@ -127,7 +131,8 @@ class AXML:
                             name = self.parser.getAttributeName(i)
                             value = self._escape(self.getAttributeValue(i))
                             if name == "name":
-                                actions.append(value)
+                                action_list.append(value)
+                                self.actions.add(value)
                                 break
                 elif tag == 'category':
                     if whichTag == ACT:
@@ -159,12 +164,12 @@ class AXML:
                     whichTag = -1
                 elif prefix == "receiver":
                     whichTag = -1
-                    self.receivers[tagName] = actions
-                    actions = []
+                    self.receivers[tagName] = action_list
+                    action_list = []
                 elif prefix == "service":
                     whichTag = -1
-                    self.services[tagName] = actions
-                    actions = []
+                    self.services[tagName] = action_list
+                    action_list = []
 
             elif _type == TEXT:
                 self.buff += "%s\n" % self.parser.getText()
@@ -197,6 +202,7 @@ class AXML:
         return prefix + ':'
 
     def getAttributeValue(self, index):
+        # print('getAttributeValue : ', index)
         _type = self.parser.getAttributeValueType(index)
         _data = self.parser.getAttributeValueData(index)
 
@@ -235,8 +241,7 @@ class AXML:
         return "<0x%X, type 0x%02X>" % (_data, _type)
 
     def complexToFloat(self, xcomplex):
-        return (float)
-        (xcomplex & 0xFFFFFF00) * RADIX_MULTS[(xcomplex >> 4) & 3]
+        return (float)(xcomplex & 0xFFFFFF00) * RADIX_MULTS[(xcomplex >> 4) & 3]
 
     def getPackage(self, id):
         if id >> 24 == 1:
@@ -253,13 +258,22 @@ class AXML:
         return self.content['versionName']
 
     def getMinSdkVersion(self):
-        return self.content['minSdkVersion']
+        if 'minSdkVersion' in self.content.keys():
+            return self.content['minSdkVersion']
+        else:
+            return 3
 
     def getTargetSdkVersion(self):
-        return self.content['targetSdkVersion']
+        if 'targetSdkVersion' in self.content.keys():
+            return self.content['targetSdkVersion']
+        else:
+            return self.getMinSdkVersion()
 
     def getPermissions(self):
         return self.permissions
+
+    def getActions(self):
+        return self.actions
 
     def getApplicationName(self):
         if 'application' in self.content:
