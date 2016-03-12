@@ -27,13 +27,11 @@ from . import axml
 
 option_0 = {
     'name': ('-i', '--input'),
-    'help': 'filename input (Android\'s binary xml)', 'nargs': 1
-}
+    'help': 'filename input (Android\'s binary xml)', 'nargs': 1}
 
 option_1 = {
     'name': ('-o', '--output'),
-    'help': 'filename output of the xml', 'nargs': 1
-}
+    'help': 'filename output of the xml', 'nargs': 1}
 
 options = [option_0, option_1]
 
@@ -41,7 +39,6 @@ options = [option_0, option_1]
 def main(options, arguments):
     if options.input is not None:
         buff = ""
-
 
         if ".xml" in options.input:
             ap = axml.AXML(open(options.input, "rb").read())
@@ -52,7 +49,7 @@ def main(options, arguments):
                     try:
                         data = z.read(name)
                     except RuntimeError as err:
-                        print(prefix, name, err)
+                        print(name, err)
                         continue
 
                     if name == "AndroidManifest.xml":
