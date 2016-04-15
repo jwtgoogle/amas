@@ -150,15 +150,11 @@ def processZipFile(z, prefix=""):
 
         magic_number = binascii.hexlify(data[:4])
         if name == "AndroidManifest.xml" and magic_number == AXML_MAGIC_HEADER:
-            # try:
             a = AXML(data)
             if prefix != "":
                 print(prefix)
             axmlaudit(a)
-            # a.printAll()
             print('')
-            # except struct.error as err:
-            #     print(prefix, name, err)
         else:
             if DEBUG:
                 print(name, data[:4], magic_number)
@@ -204,7 +200,7 @@ def main(arg):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog='axmlinfos', description='对APK进行审计，并显示详细信息。')
+        prog='apkaudit', description='apk audit')
     parser.add_argument('dirName')
     args = parser.parse_args()
 

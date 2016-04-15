@@ -15,4 +15,4 @@ REM  See the License for the specific language governing permissions and
 REM  limitations under the License.
 
 set PYTHONPATH=%~dp0
-python -O -m main.rename_apk %*
+python -O -m main.ren_apk %*

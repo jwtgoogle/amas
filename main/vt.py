@@ -14,7 +14,7 @@
 
 import argparse
 import os.path
-import urllib.reques
+import urllib.request
 import urllib.parse
 import hashlib
 import simplejson

@@ -27,48 +27,31 @@ AXML_MAGIC_HEADERS = [b'03000800', b'00000800']
 files_list = []
 
 
-def displayFiles():
-    files_list.sort()
-    print("files:")
-    for f in files_list:
-        print(' ', f)
-    print(" ")
-    files_list.clear()
+def print_infos(z):
+    name = "AndroidManifest.xml"
+    if "AndroidManifest.xml" in z.namelist():
+        data = z.read(name)
+        axml = AXML(data)
+        axml.printAll()
 
-
-def readZip(prefix, input_zip):
-    zfiledata = io.BytesIO(input_zip)
-    zip_file = zipfile.ZipFile(zfiledata)
-    processZipFile(zip_file, prefix)
-
-
-def processZipFile(z, prefix=""):
     for name in z.namelist():
-        try:
-            data = z.read(name)
-        except RuntimeError as err:
-            print(prefix, name, err)
-            continue
-
+        data = z.read(name)
         magic_number = binascii.hexlify(data[:4])
+        if magic_number in MAGIC_HEADERS.keys():
+            print(name, MAGIC_HEADERS[magic_number])
+            if MAGIC_HEADERS[magic_number] == "ZIP":
+                files_list.append(name)
 
-        if name == "AndroidManifest.xml" and magic_number in AXML_MAGIC_HEADERS:
-            # try:
-            a = AXML(data)
-            if prefix != "":
-                print(prefix)
-            a.printAll()
-            print('')
-            # except struct.error as err:
-            #     print(prefix, name, err)
-        else:
-            if DEBUG:
-                print(name, data[:4], magic_number)
-            if magic_number in MAGIC_HEADERS.keys():
-                files_list.append(prefix + name + " " +
-                                  MAGIC_HEADERS[magic_number])
-                if MAGIC_HEADERS[magic_number] == 'ZIP':
-                    readZip(name + "/", data)
+    print("\n")
+
+
+def print_sub_zips(z):
+    for name in files_list:
+        print(">>>", name)
+        data = z.read(name)
+        zfiledata = io.BytesIO(data)
+        zip_file = zipfile.ZipFile(zfiledata)
+        print_infos(zip_file)
 
 
 def main(arg):
@@ -78,17 +61,30 @@ def main(arg):
             for filename in filenames:
                 filePath = os.path.join(parent, filename)
                 print(filePath)
+                if zipfile.is_zipfile(filePath):
+                    try:
+                        with zipfile.ZipFile(filePath, mode="r") as z:
+                            print_infos(z)
+                            if len(files_list) > 0:
+                                print_sub_zips(z)
+                                files_list.clear()
+                    except zipfile.BadZipFile as z:
+                        print(filePath, e)
+    elif os.path.isfile(arg):
+        if zipfile.is_zipfile(arg):
+            try:
+                with zipfile.ZipFile(arg, mode="r") as z:
+                    print_infos(z)
+                    if len(files_list) > 0:
+                        print_sub_zips(z)
+                        files_list.clear()
+            except zipfile.BadZipFile as z:
+                print(filePath, e)
 
-                try:
-                    with zipfile.ZipFile(filePath, 'r') as z:
-                        processZipFile(z)
-                        # displayFiles()
-                except zipfile.BadZipFile as err:
-                    print(filePath, err)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog='axmlinfos', description='获取APK的整体信息，包含清单、文件。')
-    parser.add_argument('dirName')
+        prog='apkinfos', description='get apk infos')
+    parser.add_argument('filename')
     args = parser.parse_args()
-    main(args.dirName)
+    main(args.filename)

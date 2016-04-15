@@ -53,7 +53,7 @@ def carveDex(oat_file, dex_offset, oat_file_name):
 
     print("Got DEX size: 0x%x" % dex_size)
 
-    carved_name = "%s.%s.odex" % (oat_file_name, hex(dex_offset))
+    carved_name = "%s.%s.dex" % (oat_file_name, hex(dex_offset))
 
     print("Carving to: \'%s\'" % carved_name)
 

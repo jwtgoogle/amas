@@ -19,18 +19,18 @@ import os
 import os.path
 import binascii
 import sys
+from difflib import SequenceMatcher
 
 from enjarify import parsedex
 from axmlparser.axml import AXML
-
+from libs import strtool
+from libs import dextool
 
 MAGIC_HEADERS = {b'504b0304': 'ZIP', b'7f454c46': 'ELF'}
 AXML_MAGIC_HEADERS = [b'03000800', b'00000800']
 DEX_MAGIC_HEADERS = [b'6465780a']
 
-is_first = True
-
-DEBUG = False
+is_first_axml = True
 
 pkgd = {}
 inpackage = set()
@@ -39,12 +39,16 @@ inperms = set()
 actiond = {}
 inacts = set()
 
-activitiesd = {}
+activitiesd = {} # activity:count
 inacivities = set()
-recd = {}
+recd = {} # receiver : count
 inrecs = set()
-servd = {}
+servd = {} #  # service:count
 inservs = set()
+
+# dex_strings_dict = {}
+strs_list = []
+dex_strings_inset = {}
 
 activities = []
 receivers = []
@@ -59,11 +63,12 @@ max_s = 0
 min_p = 99
 max_p = 0
 
-inSet = {}
 
-
+# FIXME 这里最好是单纯的返回，解析后的axml数据，数据处理也许应该放在外面
 def process_axml(data):
-    global is_first
+    global is_first_axml
+
+    # 存放的是清单的绝对公共特征
     global inpackage
     global inperms
     global inacts
@@ -71,6 +76,7 @@ def process_axml(data):
     global inrecs
     global inservs
 
+    # 字典存放着各个节点的数量
     global pkgd
     global permd
     global recd
@@ -91,18 +97,18 @@ def process_axml(data):
     global max_s
     global max_p
 
-    a = AXML(data)
+    axml = AXML(data)
 
-    p_set = set()
-    pkg = a.getPackageName()
-    p_set.add(pkg)
+    pkg_tmp_set = set()
+    pkg = axml.getPackageName()
+    pkg_tmp_set.add(pkg)
     if pkg not in pkgd.keys():
         pkgd[pkg] = 1
     else:
         pkgd[pkg] = pkgd[pkg] + 1
 
     a_set = set()
-    tmp = a.getActivities()
+    tmp = axml.getActivities()
 
     if len(tmp) < min_a:
         min_a = len(tmp)
@@ -110,75 +116,53 @@ def process_axml(data):
         max_a = len(tmp)
 
     tmp_list = []
-    for act in a.getActivities():
-        # 截取掉包名 AttrMatch 不支持包名
-        a_set.add(act)
-        tmp_list.append(act.replace(pkg, ''))
-        if act in activitiesd.keys():
-            activitiesd[act] = activitiesd[act] + 1
+    for activity in axml.getActivities():
+        a_set.add(activity)
+        tmp_list.append(activity)
+        if activity in activitiesd.keys():
+            activitiesd[activity] = activitiesd[activity] + 1
         else:
-            activitiesd[act] = 1
-
-        key = act.split('.')[-1]
-        a_set.add(key)
-        if key in activitiesd.keys():
-            activitiesd[key] = activitiesd[key] + 1
-        else:
-            activitiesd[key] = 1
+            activitiesd[activity] = 1
 
     activities.append(tmp_list)
 
     r_set = set()
-    tmp = a.getReceivers()
+    tmp = axml.getReceivers()
     if len(tmp) < min_r:
         min_r = len(tmp)
     if len(tmp) > max_r:
         max_r = len(tmp)
 
     tmp_list = []
-    for r in a.getReceivers():
+    for r in axml.getReceivers():
         r_set.add(r)
-        tmp_list.append(r.replace(pkg, ''))
+        tmp_list.append(r)
         if r not in recd.keys():
             recd[r] = 1
         else:
             recd[r] = recd[r] + 1
 
-        key = r.split('.')[-1]
-        r_set.add(key)
-        if key not in recd.keys():
-            recd[key] = 1
-        else:
-            recd[key] = recd[key] + 1
-
     receivers.append(tmp_list)
 
     s_set = set()
-    tmp = a.getServices()
+    tmp = axml.getServices()
     if len(tmp) < min_s:
         min_s = len(tmp)
     if len(tmp) > max_s:
         max_s = len(tmp)
 
     tmp_list = []
-    for s in a.getServices():
+    for s in axml.getServices():
         s_set.add(s)
-        tmp_list.append(s.replace(pkg, ''))
+        tmp_list.append(s)
         if s not in servd.keys():
             servd[s] = 1
         else:
             servd[s] = servd[s] + 1
 
-        key = s.split('.')[-1]
-        s_set.add(key)
-        if key not in servd.keys():
-            servd[key] = 1
-        else:
-            servd[key] = servd[key] + 1
-
     services.append(tmp_list)
 
-    permissions = a.getPermissions()
+    permissions = axml.getPermissions()
     tmp_p = set()
     for p in permissions:
         # 1、 仅计算 android.permission
@@ -193,7 +177,7 @@ def process_axml(data):
     the system implicitly grants your app this permission.
     If you don't need this permission, be sure your targetSdkVersion is 4 or higher.
     '''
-    if int(a.getMinSdkVersion()) <= 3 and int(a.getTargetSdkVersion()) <= 3:
+    if int(axml.getMinSdkVersion()) <= 3 and int(axml.getTargetSdkVersion()) <= 3:
         if "android.permission.WRITE_EXTERNAL_STORAGE" not in tmp_p:
             perm_num = perm_num + 1
         if "android.permission.READ_PHONE_STATE" not in tmp_p:
@@ -209,336 +193,181 @@ def process_axml(data):
         else:
             permd[key] = permd[key] + 1
 
-    actions = a.getActions()
+    actions = axml.getActions()
     for key in actions:
         if key not in actiond.keys():
             actiond[key] = 1
         else:
             actiond[key] = actiond[key] + 1
 
-    if is_first:
-        is_first = False
-        inpackage = p_set
-        inperms = a.getPermissions()
-        inacts = a.getActions()
+    if is_first_axml:
+        is_first_axml = False
+        inpackage = pkg_tmp_set
+        inperms = axml.getPermissions()
+        inacts = axml.getActions()
         inacivities = a_set
         inrecs = r_set
         inservs = s_set
     else:
-        inpackage = inpackage & p_set
-        inperms = inperms & a.getPermissions()
-        inacts = inacts & a.getActions()
+        inpackage = inpackage & pkg_tmp_set
+        inperms = inperms & axml.getPermissions()
+        inacts = inacts & axml.getActions()
         inacivities = inacivities & a_set
         inrecs = inrecs & r_set
         inservs = inservs & s_set
 
 
-def process_apk(file_path, name):
-    if DEBUG:
-        print(file_path)
-    try:
-        with zipfile.ZipFile(file_path, 'r') as z:
-            z.testzip()
-            if name in z.namelist():
-                try:
-                    data = z.read(name)
-                except RuntimeError as err:
-                    print(file_path, err)
-                magic_number = binascii.hexlify(data[:4])
-
-                if magic_number in AXML_MAGIC_HEADERS:
-                    process_axml(data)
-                elif magic_number in DEX_MAGIC_HEADERS:
-                    process_dex(data)
-                else:
-                    print("Error magic number : ", file_path, magic_number)
-    except zipfile.BadZipFile as err:
-        print(file_path, err)
-        return -1
-
-    return 0
+def get_dex_datas(file_path):
+    dex_datas = []
+    if zipfile.is_zipfile(file_path):
+        try:
+            with zipfile.ZipFile(file_path, 'r') as z:
+                for name in z.namelist():
+                    if name.startswith('classes') and name.endswith('.dex'):
+                        dex_datas.append(z.read(name))
+        except zipfile.BadZipfile as e:
+            print(file_path, e)
+    return dex_datas
 
 
-def match_pkgs(strs):
-    # for s in strs:
-    #     print(s)
+def get_manifest_wildcards(lists, inset):
+    list0 = lists[0]
+    lists.remove(list0)
+    patterns = set()
+    for item0 in list0:
+        pattern = item0
+        for sub_list in lists:
+            pattern = strtool.get_best_wildcard_from_list(pattern, sub_list, 1)
+        if pattern:
+            patterns.add(pattern)
 
-    tmp = strs[0]
-    # print("\n" + tmp)
-    for i in range(0, len(tmp)):
-        for s in strs:
-            if tmp[:i] not in s:
-                if i < 3:
-                    return None
-                return tmp[:i - 1] + '*'
-
-    for i in range(0, len(tmp)):
-        # print(tmp[len(tmp) - i - 1:])
-        for p in strs:
-            if tmp[len(tmp) - i:] not in p:
-                if i < 3:
-                    return None
-                return '*' + tmp[len(tmp) - i - 1:]
-
-    return None
+    return patterns
 
 
-def match_a_r_s(lists):
-
-    # for item in lists:
-    #     print(item)
-
-    matchs = []
-
-    # 某个集合为空的情况，意味着某个样本没有对应的节点，故不做交集
-    for l in lists:
-        if len(l) == 0:
-            return matchs
-
-    # 自前往后匹配
-    pkg_acts = lists[0]
-    for act in pkg_acts:
-        if act.startswith('.'):
-            continue
-
-        flag = False
-        for m in matchs:
-            if m.replace('*', '') in act:
-                flag = True
-                break
-
-        if flag and len(matchs) > 0:
-            continue
-
-        # print(act)
-        for i in range(1, len(act)):
-            # print('->', act[:i])
-            flag = False
-            for item in lists:
-                # 必须在所有的 acitivity 里面都包含
-                has = False
-                for other_act in item:
-                    if other_act.startswith(act[:i]):
-                        # print(act[:i], other_act)
-                        has = True
-                        break
-
-                if not has:
-                    # 不包含的情况，则需要终止
-                    # print(act[:i])
-                    if i > 3 and act[:i - 1]:
-                        matchs.append(act[:i - 1] + '*')
-                    flag = True
-                    break
-            if flag:
-                break
-
-    # 自后往前匹配
-    for act in pkg_acts:
-        flag = False
-        for m in matchs:
-            if m.replace('*', '') in act:
-                flag = True
-                break
-
-        if flag and len(matchs) > 0:
-            continue
-
-        for i in range(0, len(act)):
-            # print(act[len(act) - i - 1:])
-            flag = True
-            for item in lists:
-                # 必须在所有的 acitivity 里面都包含
-                has = False
-                for other_act in item:
-                    # print(other_act)
-                    if other_act.endswith(act[len(act) - i - 1:]):
-                        has = True
-                        break
-                if not has:
-                    # 不包含的情况，则需要终止
-                    flag = False
-                    break
-            if not flag:
-                if i > 2:
-                    matchs.append('*' + act[len(act) - i:])
-                break
-
-    tmp = set()
-    for m1 in matchs:
-        for m2 in matchs:
-            new = m1.replace('*', '')
-            if m1 != m2 and new in m2:
-                tmp.add(m1)
-
-    for m in tmp:
-        matchs.remove(m)
-
-    return matchs
-
-
-def in_am(rootdir, is_statistics):
+def in_manifest(rootdir, is_statistics, is_fuzzy=False):
     sum = 0
     am_name = "AndroidManifest.xml"
 
-    # FIXME 需要考虑没有清单的情况
+    result_dict = dict()
     for parent, dirnames, filenames in os.walk(rootdir):
         for filename in filenames:
-            sum = sum + 1
-            filePath = os.path.join(parent, filename)
-            result = process_apk(filePath, am_name)
-            sum = sum + result
+            filepath = os.path.join(parent, filename)
+            if zipfile.is_zipfile(filepath):
+                try:
+                    with zipfile.ZipFile(filepath, 'r') as z:
+                        z.testzip()
+                        if "AndroidManifest.xml" not in z.namelist():
+                            continue
+                        try:
+                            data = z.read("AndroidManifest.xml")
+                        except RuntimeError as err:
+                            print(filepath, err)
+                            continue
 
-    flag = False
-    match_pkg = None
-    if len(inpackage) == 1:
-        print(inpackage.pop())
-        flag = True
-    else:
+                        process_axml(data)
+                except zipfile.BadZipFile as err:
+                    print(filepath, err)
+                    continue
+                sum = sum + 1
+
+    if len(inperms) > 0:
+        tmp = list(inperms)
+        tmp.sort()
+        result_dict['Permissions'] = tmp
+
+    if len(inacts) > 0:
+        tmp = list(inacts)
+        tmp.sort()
+        result_dict["Actions"] = tmp
+
+    if is_fuzzy:
         pkgs = []
         for item in pkgd.items():
             pkgs.append(item[0])
+        tmp_pkg = []
+        tmp_pkg.append(strtool.get_wildcards_in_list(pkgs, 1))
+        result_dict['Package'] = tmp_pkg
 
-        match_pkg = match_pkgs(pkgs)
-        if match_pkg:
-            print(match_pkg)
-            flag = True
-    if flag:
-        print()
-        flag = False
+        wildcards = get_manifest_wildcards(activities, inacivities)
+        if wildcards:
+            result_dict["Fuzzy_Activities"] = wildcards
 
-    tmp = list(inperms)
-    tmp.sort()
-    for p in tmp:
-        flag = True
-        if 'android.permission.' in p or 'com.android.launcher.permission' in p:
-            print(p)
-    if flag:
-        print()
-        flag = False
+        wildcards = get_manifest_wildcards(receivers, inrecs)
+        if wildcards:
+            print("\nRECEIVERS:")
+            result_dict["Fuzzy_Receivers"] = wildcards
 
-    tmp = list(inacts)
-    tmp.sort()
-    for p in tmp:
-        flag = True
-        print(p)
-    if flag:
-        print()
-        flag = False
+        wildcards = get_manifest_wildcards(services, inservs)
+        if len(wildcards) > 0:
+            print("\nSERVICES:")
+            result_dict["Fuzzy_Services"] = wildcards
+    else:
+        if len(inacivities) > 0:
+            result_dict["Activities"] = inacivities
+        if len(inrecs) > 0:
+            result_dict["Receivers"] = inrecs
+        if len(inservs) > 0:
+            result_dict["Services"] = inservs
 
-    tmp = list(inacivities)
-    tmp.sort()
-    i = 0
-    for p in tmp:
-        if '.' in p:
-            i = i + 1
-            if i > 5:
-                break
-            flag = True
-            print(p)
-    if flag:
-        print()
-        flag = False
+    count_list = [min_p, max_p, min_a, max_a, min_r, max_r, min_s, max_s]
+    result_dict["Manifest_Count"] = count_list
 
-    matchs = match_a_r_s(activities)
-    for m in matchs:
-        is_ok = True
-        for p in tmp:
-            if m.replace('*', '') in p:
-                is_ok = False
-                break
-        if is_ok:
-            flag = True
-            print(m)
-    if flag:
-        print()
-        flag = False
+    if not is_statistics:
+        return result_dict
 
-    tmp = list(inrecs)
-    tmp.sort()
-    for p in tmp:
-        if '.' in p:
-            flag = True
-            print(p)
-    if flag:
-        print()
-        flag = False
+    print('\n')
+    print('-'*20, 'Statistics', '-'*20)
 
-    # if min_r > 0: 在函数里面处理比较好
-    matchs = match_a_r_s(receivers)
-    for m in matchs:
-        is_ok = True
-        for p in tmp:
-            if m.replace('*', '') in p:
-                is_ok = False
-                break
-        if is_ok:
-            flag = True
-            print(m)
-    if flag:
-        print()
-        flag = False
+    print("\nPackage:", sum)
+    max_len = 0
+    for item in pkgd.items():
+        if max_len < len(item[0]):
+            max_len = len(item[0])
+    for t in sorted(pkgd.items(), key=lambda d: d[1]):
+        print(t[0], ' ' * (max_len - len(t[0])), format(t[1], '2.0f'), format(t[1]/sum, '0.2f'))
 
-    tmp = list(inservs)
-    tmp.sort()
-    for p in tmp:
-        if '.' in p:
-            flag = True
-            print(p)
-    if flag:
-        print()
-        flag = False
+    print("\nPermissions:", sum)
+    max_len = 0
+    for item in permd.items():
+        if max_len < len(item[0]):
+            max_len = len(item[0])
+    for t in sorted(permd.items(), key=lambda d: d[1]):
+        print(t[0], ' ' * (max_len - len(t[0])), format(t[1], '2.0f'), format(t[1]/sum, '0.2f'))
 
-    matchs = match_a_r_s(services)
-    for m in matchs:
-        flag = True
-        is_ok = True
-        for p in tmp:
-            if m.replace('*', '') in p:
-                is_ok = False
-                break
-        if is_ok:
-            print(m)
-    if flag:
-        print()
-        flag = False
+    print("\nActions:", sum)
+    max_len = 0
+    for item in actiond.items():
+        if max_len < len(item[0]):
+            max_len = len(item[0])
+    for t in sorted(actiond.items(), key=lambda d: d[1]):
+        print(t[0], ' ' * (max_len - len(t[0])), format(t[1], '2.0f'), format(t[1]/sum, '0.2f'))
 
-    print("AndroidManifest 统计:")
-    print("PER MIN: %2d PER MAX: %2d" % (min_p, max_p))
-    print("ACT MIN: %2d ACT MAX: %2d" % (min_a, max_a))
-    print("REC MIN: %2d REC MAX: %2d" % (min_r, max_r))
-    print("SER MIN: %2d SER MAX: %2d" % (min_s, max_s))
+    print("\nActivities:", sum)
+    max_len = 0
+    for item in activitiesd.items():
+        if max_len < len(item[0]):
+            max_len = len(item[0])
+    for t in sorted(activitiesd.items(), key=lambda d: d[1]):
+        print(t[0], ' ' * (max_len - len(t[0])), format(t[1], '2.0f'), format(t[1]/sum, '0.2f'))
 
-    if is_statistics:
-        print("【TOTAL】", sum, '\n')
-        print("【----- 清单统计 -----】")
-        print("【Package】")
-        for t in sorted(pkgd.items(), key=lambda d: d[1]):
-            print(t)
+    print("\nReceivers:", sum)
+    max_len = 0
+    for item in recd.items():
+        if max_len < len(item[0]):
+            max_len = len(item[0])
+    for t in sorted(recd.items(), key=lambda d: d[1]):
+        print(t[0], ' ' * (max_len - len(t[0])), format(t[1], '2.0f'), format(t[1]/sum, '0.2f'))
 
-        print("\n【Permissions】")
-        for t in sorted(permd.items(), key=lambda d: d[1]):
-            print(t)
+    print("\nServices:", sum)
+    for t in sorted(servd.items(), key=lambda d: d[1]):
+        print(t[0], ' ' * (max_len - len(t[0])), format(t[1], '2.0f'), format(t[1]/sum, '0.2f'))
 
-        print("\n【Actions】")
-        for t in sorted(actiond.items(), key=lambda d: d[1]):
-            print(t)
 
-        print("\n【Activities】")
-        for t in sorted(activitiesd.items(), key=lambda d: d[1]):
-            print(t)
-
-        print("\n【Receivers】")
-        for t in sorted(recd.items(), key=lambda d: d[1]):
-            print(t)
-
-        print("\n【Services】")
-        for t in sorted(servd.items(), key=lambda d: d[1]):
-            print(t)
-
+    return result_dict
 
 def process_dex(data):
-    global inSet
+    global dex_strings_inset
+    global dex_strings_dict
 
     try:
         dex = parsedex.DexFile(data)
@@ -547,105 +376,395 @@ def process_dex(data):
         return
 
     tmpSet = set()
+    tmp_list = []
     for i in range(dex.string_ids.size):
         s = dex.string(i)
-        tmpSet.add(s)
+        if s in dex_strings_dict.keys():
+            dex_strings_dict[s] = dex_strings_dict[s] + 1
+        else:
+            dex_strings_dict[s] = 1
 
-    if len(inSet) is 0:
-        inSet = tmpSet
+        if len(s) > 5:
+            tmpSet.add(s)
+
+    strs_list.append(tmpSet)
+
+    if len(dex_strings_inset) is 0:
+        dex_strings_inset = tmpSet
     else:
-        inSet = inSet.intersection(tmpSet)
+        dex_strings_inset = dex_strings_inset & tmpSet
 
 
-def in_dex(dir, arg_d):
-    is_filter = False
-    if arg_d == '1':
-        is_filter = True
-    rootdir = dir
-    dex_name = "classes.dex"
-    for parent, dirnames, filenames in os.walk(rootdir):
-        for filename in filenames:
-            # flag = 0
-            filePath = os.path.join(parent, filename)
-            process_apk(filePath, dex_name)
+def get_dex_strings(dex_datas):
+    global dex_strings_inset
 
-    apis = ""
-    with open(os.path.join(sys.path[1], "cfg", 'api-versions.xml'), 'r', encoding='utf-8') as f:
-        apis = f.read()
+    dex_files = []
+    try:
+        for dex_data in dex_datas:
+            dex_files.append(parsedex.DexFile(dex_data))
+    except Exception as e:
+        print(e, "'s dex can not be parsed, please report to the author.")
+        return
 
     strs = ""
     with open(os.path.join(sys.path[1], "cfg", 'strs.txt'), 'r', encoding='utf-8') as f:
         strs = f.read()
 
-    apis = apis + strs
+    tmp_set = set()
+    tmp_list = []
+    for dex_file in dex_files:
+        for i in range(dex_file.string_ids.size):
+            s = dex_file.string(i)
+            if s.decode(errors='ignore') in strs:
+                continue
+            tmp_set.add(s)
 
-    inList = list(inSet)
-    inList.sort()
-    for s in inList:
-        if isinstance(s, int) or isinstance(s, str):
+    strs_list.append(tmp_set)
+
+    if len(dex_strings_inset) is 0:
+        dex_strings_inset = tmp_set
+    else:
+        dex_strings_inset = dex_strings_inset & tmp_set
+
+
+def save_cache(strs, filename):
+    path = os.path.join(sys.path[1], 'cache', filename)
+    with open(path, 'w', encoding='utf-8') as f:
+        for s in strs:
+            f.write(s + '\n')
+
+
+def is_cache(filename):
+    path = os.path.join(sys.path[1], 'cache', filename)
+    return os.path.exists(path)
+
+
+def read_cache(filename):
+    path = os.path.join(sys.path[1], 'cache', filename)
+    with open(path, 'r', encoding='utf-8') as f:
+        strs = set()
+        lines = f.readlines()
+        for line in lines:
+            strs.add(line[:-1].encode(errors='ignore'))
+
+        return strs
+
+
+def in_dex_strings(dir, hex_flag, is_fuzzy=False):
+    rootdir = dir
+    dexs_strings_list = [] # 将每一个APK的字符串集合，当作一个元素，存放在这个列表里面
+    dexs_common_strings = set()
+    is_first = True
+    for parent, dirnames, filenames in os.walk(rootdir):
+        for filename in filenames:
+            filepath = os.path.join(parent, filename)
+            print(filepath, 'getting strings', end=' ', flush=True)
+
+            if is_cache(filename):
+                strset = read_cache(filename)
+            else:
+                strset = dextool.get_strings(filepath)
+                save_cache(strset, filename)
+
+            dexs_strings_list.append(strset)
+            print(len(strset), 'ok')
+
+            if is_first and strset:
+                dexs_common_strings = strset
+                is_first = False
+            elif strset:
+                dexs_common_strings = dexs_common_strings & strset
+
+    if not is_fuzzy:
+        return (dexs_common_strings, None)
+
+    str_list = []
+    dexs_strings_list_0 = dexs_strings_list[0]
+    for item in dexs_strings_list_0 - dexs_common_strings:
+        str_list.append(item.decode(errors='ignore'))
+    dexs_strings_list.remove(dexs_strings_list_0)
+
+    wildcards_set = set(str_list)
+    for ss2 in dexs_strings_list:
+        tmp_sss = []
+        for item in ss2 - dexs_common_strings:
+            tmp_sss.append(item.decode(errors='ignore'))
+
+        tmp = set()
+        for s1 in wildcards_set:
+            tmp.add(strtool.get_best_wildcard_from_list(s1, tmp_sss))
+        wildcards_set.clear()
+        wildcards_set = tmp
+
+    return (dexs_common_strings, wildcards_set)
+
+
+def in_resources(rootdir):
+    name_set = set()
+    crc_set = set()
+    is_first = True
+    for parent, dirnames, filenames in os.walk(rootdir):
+        for filename in filenames:
+            filePath = os.path.join(parent, filename)
+
+            if not zipfile.is_zipfile(filePath):
+                continue
+
+            result = get_file_set(filePath)
+            if not result:
+                continue
+
+            if is_first:
+                name_set = result[0]
+                crc_set = result[1]
+                is_first = False
+            else:
+                name_set = name_set & result[0]
+                crc_set = crc_set & result[1]
+
+    tmp = set()
+    for item in name_set:
+        if item.startswith('META-INF/') or item in ['AndroidManifest.xml', 'resources.arsc']:
+            tmp.add(item)
+        elif item.startswith('classes') and item.endswith('.dex'):
+            tmp.add(item)
+
+    for item in tmp:
+        name_set.remove(item)
+
+    return (name_set, crc_set)
+
+
+def get_file_set(file_path):
+    crc_set = set()
+    try:
+        with zipfile.ZipFile(file_path, 'r') as z:
+            z.testzip()
+            for info in z.infolist():
+                if info.filename.endswith("/"):
+                    continue
+                crc_set.add(info.filename + "_" +  str(hex(info.CRC)).upper()[2:])
+            return (set(z.namelist()), crc_set)
+
+    except zipfile.BadZipFile as err:
+        print(file_path, err)
+        return False
+
+
+def in_dex_opcodes(rootdir, is_fuzzy, is_object):
+    '''
+        rootdir  目录
+        is_fuzzy 是否模糊匹配
+        is_object 是否匹配父类为Object的类
+    '''
+    ops_set = set()
+    fuzzy_ops_set = set()
+    method_dict = dict()
+    is_first = True
+    for parent, dirnames, filenames in os.walk(rootdir):
+        for filename in filenames:
+            filepath = os.path.join(parent, filename)
+            dexs = get_dex_datas(filepath)
+
+            if len(dexs) == 0:
+                continue
+
+            ops_set2 = set()
+            tmp_set = set()
+            if is_first:
+                print(filename)
+                for data in dexs:
+                    result = get_opcodes(data)
+                    ops_set2 = ops_set2 | result
+                ops_set = ops_set2
+                is_first = False
+            else:
+                for data in dexs:
+                    result = get_opcodes(data)
+                    ops_set2 = ops_set2 | get_opcodes(data)
+
+                for ops1, proto1, sup1, mtd1 in ops_set:
+                    if not is_object and sup1 == 'Ljava/lang/Object;':
+                        continue
+
+                    for ops2, proto2, sup2, mtd2 in ops_set2:
+                        # proto一样，父类一样，opcode一样
+                        if proto1 == proto2 and sup1 == sup2 and ops1 == ops2:
+                            tmp_set.add((ops1, proto1, sup1, mtd1))
+                            break
+                        elif proto1 == proto2 and ops1 == ops2:
+                            tmp_set.add((ops1, proto1, sup1, mtd1))
+                            break
+                        elif proto1 == proto2 and ops1 in ops2 or ops2 in ops1:
+                            tmp_set.add((ops1, proto1, sup1, mtd1))
+                            break
+
+                        if is_fuzzy:
+                            if proto1 == proto2:
+                                ratio = SequenceMatcher(None, ops1, ops2).ratio()
+                                if ratio > 0.4:
+                                    from libs import strtool
+                                    pattern = strtool.get_wildcards(ops1, ops2)
+                                    arr = pattern.split("*")
+                                    max_len = 0
+                                    for item in arr:
+                                        if max_len < len(item):
+                                            max_len = len(item)
+                                    if max_len < 10:
+                                        continue
+                                    tmp_set.add((pattern, proto1, sup1, mtd1))
+                                    break
+                ops_set.clear()
+                ops_set = tmp_set
+
+    for ops1, proto1, sup1, mtd1 in ops_set:
+        print(ops1, proto1, sup1, mtd1)
+
+
+def get_opcodes(data):
+    '''
+        不解析Android API相关的类
+        不解析父类为自定义类的类
+    '''
+    from enjarify import parsedex
+
+    with open(os.path.join(sys.path[1], "cfg", 'classes.txt'), \
+            'r', encoding='utf-8') as f:
+        apis = f.read()
+
+    dexFile = parsedex.DexFile(data)
+    opcode_set = set()
+    for dexClass in dexFile.classes:
+        if dexClass.name.decode() in apis:
             continue
 
-        if len(s) < 4:
+        if dexClass.super.decode() not in apis:
             continue
 
-        s_decode = s.decode(errors='ignore')
+        dexClass.parseData()
+        for method in dexClass.data.methods:
+            id =  method.id
+            opcodes = ''
+            if method.code is None:
+                continue
 
-        if is_filter and s_decode in apis:
-            continue
-        if is_filter and s_decode.startswith("L") and s_decode.endswith(";"):
-            continue
+            for bc in method.code.bytecode:
+                opcode = str(hex(bc.opcode)).upper()[2:]
+                if len(opcode) == 2:
+                    opcodes = opcodes + opcode
+                else:
+                    opcodes = opcodes + "0" + opcode
 
-        try:
-            print('<!-- ', end='')
-            print(s_decode, end=' ')
-            print('-->', end='')
-            print("", end='\n')
-        except UnicodeEncodeError as e:
-            print(e)
-            continue
+            if len(opcodes) < 20:
+                continue
+
+            method_sign = "L" + id.cname.decode() + ";->" \
+                         + id.name.decode() + id.desc.decode()
+            proto = get_proto_string(id.return_type, id.param_types)
+            super_class = 'L' + dexClass.super.decode() + ';'
+            opcode_set.add((opcodes, proto, super_class, method_sign))
+
+    return opcode_set
 
 
-def in_file(rootdir):
-    pass
+def get_proto_string(return_type, param_types):
+    r = return_type.decode()
+    if len(r) > 1:
+        r = 'L'
+
+    ps = ''
+    for pt in param_types:
+        p = pt.decode()
+        if len(p) > 1:
+            ps = ps + 'L'
+        else:
+            ps = ps + p
+
+    return r + ps
 
 
 def main(args):
-    rootdir = args.dirName
+    rootdir = args.dir
     if not os.path.isdir(rootdir):
         print("Please give a correct directory.")
         return
 
-    in_am(rootdir, args.s)
+    if args.m and args.M:
+        print('Only use one of m and M!')
+        return
 
-    if args.d:
-        in_dex(rootdir, args.d)
+    if args.o and args.O:
+        print('Only use one of o and O!')
+        return
 
-    in_file(rootdir)
+    if args.m:
+        result = in_manifest(rootdir, False, args.f)
+        keys = list(result.keys())
+        keys.sort()
+        for key in keys:
+            print(key)
+            if key == 'Manifest_Count':
+                count_list = result[key]
+                print("PER MIN: %2d PER MAX: %2d" % (count_list[0], count_list[1]))
+                print("ACT MIN: %2d ACT MAX: %2d" % (count_list[2], count_list[3]))
+                print("REC MIN: %2d REC MAX: %2d" % (count_list[4], count_list[5]))
+                print("SER MIN: %2d SER MAX: %2d" % (count_list[6], count_list[7]))
+                print()
+                continue
+            for value in result[key]:
+                print(value)
+            print('')
+
+    elif args.M:
+        result = in_manifest(rootdir, True, args.f)
+
+    if args.s:
+        # TODO 如果APK没有classes.dex，或者解析出错，打印出来
+        result = in_dex_strings(rootdir, False, args.f)
+        print("Dex Strings:")
+        strs = list(result[0])
+        strs.sort()
+        for s in strs:
+            print(s)
+
+        if result[1]:
+            print("Dex Fuzzy Strings:")
+            strs = list(result[1])
+            strs.sort()
+            for s in strs:
+                print(s)
+
+    if args.r:
+        name_set, crc_set = in_resources(rootdir)
+        print('\nFiles:')
+        for name in sorted(list(name_set)):
+            if not name.endswith("/"):
+                print(name)
+
+        if len(crc_set) > 0:
+            print("\nFiles CRC:")
+            for name in sorted(list(crc_set)):
+                print(name)
 
 
-# APK必然存在共性
-# APK
-# - Manifest
-# - Dex
-#  - strings
-#  - fields
-#  - methods
-#  - classes
-#  - opcode series
-# - Certificate
-# - Resource
-# - Assets
-# File-Zip
-# - 文件结构
-# - 文件
+    if args.o:
+        in_dex_opcodes(rootdir, args.f, False) # 精准，排除Object
+    elif args.O:
+        in_dex_opcodes(rootdir, args.f, True) # 精准，包含Object
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         prog='inapk', description='Find out common feature from apks.')
-    parser.add_argument('dirName')
-    parser.add_argument('-s', action='store_true',
-                        help='开启清单统计', required=False)
-    #  amas/cfg/strs.txt 保存的没意义的字符串
-    parser.add_argument(
-        '-d', help='提取dex特征，0表示不过滤，1表示过滤，2过滤+模糊匹配，3过滤+统计', required=False)
+    parser.add_argument('dir')
+    parser.add_argument('-m', action='store_true', help='manifest', required=False)
+    parser.add_argument('-M', action='store_true', help='manifest, with statistics', required=False)
+    parser.add_argument('-r', action='store_true', help='resources', required=False)
+    parser.add_argument('-s', action='store_true', help='dex strings.', required=False)
+    # parser.add_argument('-S', action='store_true', help='dex strings with hex.', required=False)
+    parser.add_argument('-o', action='store_true', help='dex opcodes, precise matching and not suport java/lang/Object.', required=False)
+    parser.add_argument('-O', action='store_true', help='dex opcodes, precise matching all classes.', required=False)
+    parser.add_argument('-f', action='store_true', help='open fuzzing', required=False)
+
     args = parser.parse_args()
     main(args)
