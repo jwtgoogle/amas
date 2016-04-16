@@ -16,4 +16,4 @@ REM  limitations under the License.
 
 
 set PYTHONPATH=%~dp0
-python -O -m main.oat2dex %*
+python -O -m oat2dex.oat2dex %*

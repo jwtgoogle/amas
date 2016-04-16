@@ -4,3 +4,6 @@
 [submodule "axmlparser"]
 	path = axmlparser
 	url = git@github.com:acgmohu/axmlparser.git
+[submodule "oat2dex"]
+	path = oat2dex
+	url = git@github.com:acgmohu/oat2dex-python3.git
