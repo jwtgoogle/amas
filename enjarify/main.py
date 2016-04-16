@@ -62,11 +62,7 @@ def main():
     args = parser.parse_args()
 
     dexs = []
-<<<<<<< HEAD
     if zipfile.is_zipfile(args.inputfile):
-=======
-    if args.inputfile.endswith('.apk'):
->>>>>>> refs/remotes/google/master
         with zipfile.ZipFile(args.inputfile, 'r') as z:
             for name in z.namelist():
                 if name.startswith('classes') and name.endswith('.dex'):
