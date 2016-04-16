@@ -21,8 +21,8 @@ import binascii
 import sys
 from difflib import SequenceMatcher
 
-from enjarify import parsedex
-from axmlparser.axml import AXML
+from libs.enjarify import parsedex
+from libs.axmlparser.axml import AXML
 from libs import strtool
 from libs import dextool
 
@@ -117,6 +117,7 @@ def process_axml(data):
 
     tmp_list = []
     for activity in axml.getActivities():
+        activity = activity.replace(pkg, '')
         a_set.add(activity)
         tmp_list.append(activity)
         if activity in activitiesd.keys():
@@ -135,6 +136,7 @@ def process_axml(data):
 
     tmp_list = []
     for r in axml.getReceivers():
+        r = r.replace(pkg, '')
         r_set.add(r)
         tmp_list.append(r)
         if r not in recd.keys():
@@ -153,6 +155,7 @@ def process_axml(data):
 
     tmp_list = []
     for s in axml.getServices():
+        s = s.replace(pkg, '')
         s_set.add(s)
         tmp_list.append(s)
         if s not in servd.keys():
@@ -162,7 +165,7 @@ def process_axml(data):
 
     services.append(tmp_list)
 
-    permissions = axml.getPermissions()
+    permissions = axml.getUsesPermissions()
     tmp_p = set()
     for p in permissions:
         # 1、 仅计算 android.permission
@@ -203,14 +206,14 @@ def process_axml(data):
     if is_first_axml:
         is_first_axml = False
         inpackage = pkg_tmp_set
-        inperms = axml.getPermissions()
+        inperms = axml.getUsesPermissions()
         inacts = axml.getActions()
         inacivities = a_set
         inrecs = r_set
         inservs = s_set
     else:
         inpackage = inpackage & pkg_tmp_set
-        inperms = inperms & axml.getPermissions()
+        inperms = inperms & axml.getUsesPermissions()
         inacts = inacts & axml.getActions()
         inacivities = inacivities & a_set
         inrecs = inrecs & r_set
@@ -237,8 +240,8 @@ def get_manifest_wildcards(lists, inset):
     for item0 in list0:
         pattern = item0
         for sub_list in lists:
-            pattern = strtool.get_best_wildcard_from_list(pattern, sub_list, 1)
-        if pattern:
+            pattern = strtool.get_best_wildcard_from_list(pattern, sub_list, 2)
+        if pattern and pattern != '*':
             patterns.add(pattern)
 
     return patterns
@@ -294,12 +297,10 @@ def in_manifest(rootdir, is_statistics, is_fuzzy=False):
 
         wildcards = get_manifest_wildcards(receivers, inrecs)
         if wildcards:
-            print("\nRECEIVERS:")
             result_dict["Fuzzy_Receivers"] = wildcards
 
         wildcards = get_manifest_wildcards(services, inservs)
         if len(wildcards) > 0:
-            print("\nSERVICES:")
             result_dict["Fuzzy_Services"] = wildcards
     else:
         if len(inacivities) > 0:

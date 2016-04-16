@@ -17,12 +17,20 @@ def get_wildcards(str1, str2, min_length=0):
         else:
             wildcards = wildcards + item.strip()
 
+    if not wildcards:
+        return wildcards
+
     result = ''
     if min_length > 0:
         if wildcards[0] == '*':
             result = '*'
+        is_first = True
         for item in wildcards.split('*'):
-            if len(result) > 0 and not result.endswith('*'):
+            if is_first:
+                is_first = False
+                if len(item) < min_length and not result.endswith('*'):
+                    result = result + '*'
+            elif not result.endswith('*'):
                 result = result + '*'
             if len(item) > min_length:
                 result = result + item
@@ -43,23 +51,20 @@ def get_wildcards_in_list(str_list, min_length=0):
     return wildcards
 
 
-def get_best_wildcard_from_list(str, str_list, min_length=0):
+def get_best_wildcard_from_list(str1, str_list, min_length=0):
     '''
         从列表str_list中，找出一个与str最相似的通配字符串。
     '''
-    max_len = 0
-    best_wildcards = ''
-    for item in str_list:
-        radio = get_radio(str, item)
-        if radio < 0.5:
-            continue
-        wildcards = get_wildcards(str, item, min_length)
-        for item in wildcards.split('*'):
-            if len(item) > max_len:
-                max_len = len(item)
-                best_wildcards = wildcards
+    best_radio = 0
+    best_str = ''
+    for sss in str_list:
+        radio = get_radio(str1, sss)
+        if best_radio < radio:
+            best_radio = radio
+            best_str = sss
 
-    return best_wildcards
+    return get_wildcards(str1, best_str, min_length)
+
 
 def get_radio(str1, str2):
     return SequenceMatcher(None, str1, str2).ratio()
@@ -69,6 +74,6 @@ if __name__ == '__main__':
     # axbc%efg#dbddd
     # azbc$efg@oodbbcs
     #
-    print(get_wildcards('aaaxbc@efg#dbddd', 'aaazbc$efg@oodbbcs'))
-    print(get_wildcards('aaaxbc@efg#dbddd', 'aaazbc$efg@oodbbcs', 1))
-    print(get_wildcards('aaaxbc@efg#dbddd', 'aaazbc$efg@oodbbcs', 2))
+    print(get_wildcards('aaaxbc@efg#dbddd', 'aaaixzbc$efg@oodbbcs'))
+    print(get_wildcards('aaaxbc@efg#dbddd', 'aaaixzbc$efg@oodbbcs', 1))
+    print(get_wildcards('aaaxbc@efg#dbddd', 'aaaixzbc$efg@oodbbcs', 2))

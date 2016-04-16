@@ -19,7 +19,7 @@ import os.path
 import binascii
 import io
 
-from axmlparser.axml import AXML
+from libs.axmlparser.axml import AXML
 
 DEBUG = False
 MAGIC_HEADERS = {b'504b0304': 'ZIP', b'7f454c46': 'ELF'}

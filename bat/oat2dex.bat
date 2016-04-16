@@ -17,4 +17,4 @@ REM  limitations under the License.
 
 set BAT_PATH=%~dp0
 set PYTHONPATH=%BAT_PATH:~0,-5%
-python -O -m oat2dex.oat2dex %*
+python -O -m libs.oat2dex.oat2dex %*

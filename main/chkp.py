@@ -20,8 +20,8 @@ import binascii
 import io
 import shutil
 
-from axmlparser.axml import AXML
-from enjarify import parsedex
+from libs.axmlparser.axml import AXML
+from libs.enjarify import parsedex
 
 
 def main(args):
@@ -85,13 +85,24 @@ def main(args):
                         continue
 
                     if flag and no_main:
-                        print(filename, "packed.", application, main_activity)
+                        if args.v:
+                            print(filename, "packed.", application, main_activity)
+                        dst = 'packed'+ os.sep + filename
                         if args.m:
                             if not os.path.exists('packed'):
                                 os.mkdir('packed')
-                            shutil.move(filepath, 'packed'+ os.sep + filename)
+                            dst = 'packed'+ os.sep + filename
+                            if dst not in filepath:
+                                shutil.move(filepath, dst)
                     else:
-                        print(filename, "nopacked.", application, main_activity)
+                        if args.v:
+                            print(filename, "nopacked.", application, main_activity)
+                        if args.m:
+                            if not os.path.exists('nopacked'):
+                                os.mkdir('nopacked')
+                            dst = 'nopacked'+ os.sep + filename
+                            if dst not in filepath:
+                                shutil.move(filepath, dst)
 
 
 if __name__ == "__main__":
@@ -99,5 +110,6 @@ if __name__ == "__main__":
         prog='chkp', description='check APKs whether have been packed')
     parser.add_argument('dirname')
     parser.add_argument('-m', action='store_true', help='move', required=False)
+    parser.add_argument('-v', action='store_true', help='verbose', required=False)
     args = parser.parse_args()
     main(args)

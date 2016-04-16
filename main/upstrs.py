@@ -8,7 +8,7 @@ import subprocess
 import zipfile
 import shutil
 
-from enjarify import parsedex
+from libs.enjarify import parsedex
 
 
 str_set = set()

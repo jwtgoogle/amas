@@ -2,7 +2,7 @@ import zipfile
 import os
 import sys
 
-from enjarify import parsedex
+from libs.enjarify import parsedex
 
 def is_dex(filepath):
     # MAGIC_HEADERS = {b'504b0304': 'ZIP', b'7f454c46': 'ELF'}
