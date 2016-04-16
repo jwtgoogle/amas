@@ -1,6 +1,3 @@
-[submodule "enjarify"]
-	path = enjarify
-	url = git@github.com:acgmohu/enjarify.git
 [submodule "axmlparser"]
 	path = axmlparser
 	url = git@github.com:acgmohu/axmlparser.git
