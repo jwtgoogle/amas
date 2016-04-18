@@ -288,8 +288,10 @@ def in_manifest(rootdir, is_statistics, is_fuzzy=False):
         for item in pkgd.items():
             pkgs.append(item[0])
         tmp_pkg = []
-        tmp_pkg.append(strtool.get_wildcards_in_list(pkgs, 1))
-        result_dict['Package'] = tmp_pkg
+        wildcards = strtool.get_wildcards_in_list(pkgs, 1)
+        if len(wildcards) > 1:
+            tmp_pkg.append(wildcards)
+            result_dict['Package'] = tmp_pkg
 
         wildcards = get_manifest_wildcards(activities, inacivities)
         if wildcards:
@@ -432,7 +434,7 @@ def save_cache(strs, filename):
     path = os.path.join(sys.path[1], 'cache', filename)
     with open(path, 'w', encoding='utf-8') as f:
         for s in strs:
-            f.write(s + '\n')
+            f.write(s.decode(encoding='utf-8', errors='ignore') + '\n')
 
 
 def is_cache(filename):
@@ -459,7 +461,6 @@ def in_dex_strings(dir, hex_flag, is_fuzzy=False):
     for parent, dirnames, filenames in os.walk(rootdir):
         for filename in filenames:
             filepath = os.path.join(parent, filename)
-            print(filepath, 'getting strings', end=' ', flush=True)
 
             if is_cache(filename):
                 strset = read_cache(filename)
@@ -468,7 +469,7 @@ def in_dex_strings(dir, hex_flag, is_fuzzy=False):
                 save_cache(strset, filename)
 
             dexs_strings_list.append(strset)
-            print(len(strset), 'ok')
+            # print(len(strset), 'ok')
 
             if is_first and strset:
                 dexs_common_strings = strset
@@ -493,14 +494,16 @@ def in_dex_strings(dir, hex_flag, is_fuzzy=False):
 
         tmp = set()
         for s1 in wildcards_set:
-            tmp.add(strtool.get_best_wildcard_from_list(s1, tmp_sss))
+            wildcards = strtool.get_best_wildcard_from_list(s1, tmp_sss, 1)
+            if len(wildcards.replace('*', '')) > 3:
+                tmp.add(wildcards)
         wildcards_set.clear()
         wildcards_set = tmp
 
     return (dexs_common_strings, wildcards_set)
 
 
-def in_resources(rootdir):
+def in_resources(rootdir, is_all):
     name_set = set()
     crc_set = set()
     is_first = True
@@ -511,7 +514,7 @@ def in_resources(rootdir):
             if not zipfile.is_zipfile(filePath):
                 continue
 
-            result = get_file_set(filePath)
+            result = get_file_set(filePath, is_all)
             if not result:
                 continue
 
@@ -536,16 +539,26 @@ def in_resources(rootdir):
     return (name_set, crc_set)
 
 
-def get_file_set(file_path):
+def get_file_set(file_path, is_all):
+    HEADERS = { b'03000800':'AXML', b'89504e47':'PNG', }
     crc_set = set()
+    nameset = set()
     try:
         with zipfile.ZipFile(file_path, 'r') as z:
             z.testzip()
             for info in z.infolist():
-                if info.filename.endswith("/"):
-                    continue
-                crc_set.add(info.filename + "_" +  str(hex(info.CRC)).upper()[2:])
-            return (set(z.namelist()), crc_set)
+                if not is_all:
+                    data = z.read(info.filename)
+                    magic_number = binascii.hexlify(data[:4])
+                    if magic_number in HEADERS.keys():
+                        continue
+
+                crc = str(hex(info.CRC)).upper()[2:]
+                crc = '0'*(8-len(crc)) + crc
+                crc_set.add(info.filename + "_" + crc)
+                nameset.add(info.filename)
+
+            return (nameset, crc_set)
 
     except zipfile.BadZipFile as err:
         print(file_path, err)
@@ -627,8 +640,6 @@ def get_opcodes(data):
         不解析Android API相关的类
         不解析父类为自定义类的类
     '''
-    from enjarify import parsedex
-
     with open(os.path.join(sys.path[1], "cfg", 'classes.txt'), \
             'r', encoding='utf-8') as f:
         apis = f.read()
@@ -694,6 +705,10 @@ def main(args):
         print('Only use one of m and M!')
         return
 
+    if args.r and args.R:
+        print('Only use one of r and R!')
+        return
+
     if args.o and args.O:
         print('Only use one of o and O!')
         return
@@ -729,14 +744,19 @@ def main(args):
             print(s)
 
         if result[1]:
-            print("Dex Fuzzy Strings:")
+            print("\nDex Fuzzy Strings:")
             strs = list(result[1])
             strs.sort()
             for s in strs:
                 print(s)
 
     if args.r:
-        name_set, crc_set = in_resources(rootdir)
+        name_set, crc_set = in_resources(rootdir, False)
+    elif args.R:
+        name_set, crc_set = in_resources(rootdir, False)
+
+
+    if args.r or args.R:
         print('\nFiles:')
         for name in sorted(list(name_set)):
             if not name.endswith("/"):
@@ -760,7 +780,8 @@ if __name__ == "__main__":
     parser.add_argument('dir')
     parser.add_argument('-m', action='store_true', help='manifest', required=False)
     parser.add_argument('-M', action='store_true', help='manifest, with statistics', required=False)
-    parser.add_argument('-r', action='store_true', help='resources', required=False)
+    parser.add_argument('-r', action='store_true', help='resources, exclude AXML, PNG', required=False)
+    parser.add_argument('-R', action='store_true', help='All resources', required=False)
     parser.add_argument('-s', action='store_true', help='dex strings.', required=False)
     # parser.add_argument('-S', action='store_true', help='dex strings with hex.', required=False)
     parser.add_argument('-o', action='store_true', help='dex opcodes, precise matching and not suport java/lang/Object.', required=False)

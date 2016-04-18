@@ -24,85 +24,89 @@ from libs.axmlparser.axml import AXML
 from libs.enjarify import parsedex
 
 
+def chkp(filepath):
+    if zipfile.is_zipfile(filepath):
+        flag = False
+        no_main = True
+
+        try:
+            with zipfile.ZipFile(filepath, mode="r") as z:
+                z.testzip()
+                data = z.read("AndroidManifest.xml")
+
+                axml = AXML(data)
+                package = axml.getPackageName().replace('.', '/')
+                application = axml.getApplicationName()
+
+                if application is None:
+                    return ('nopacked', '', '')
+
+                application = axml.getApplicationName().replace('.', '/')
+
+                if application.startswith('/'):
+                    application = package + application
+
+                main_activity = axml.getMainActivity()
+                if main_activity:
+                    main_activity = main_activity.replace('.', '/')
+
+                dexs = []
+                for name in z.namelist():
+                    if name.startswith("classes") and name.endswith(".dex"):
+                        dexs.append(z.read(name))
+
+                if len(dexs) == 0:
+                    return ('nopacked', 'no classes.dex', '')
+
+                for dat in dexs:
+                    if flag:
+                        break
+                    dexFile = parsedex.DexFile(dat)
+                    for dexClass in dexFile.classes:
+                        if flag and no_main:
+                            break
+                        if dexClass.name.decode() == application:
+                            dexClass.parseData()
+                            for method in dexClass.data.methods:
+                                if method.id.name.decode() == "attachBaseContext":
+                                    flag = True
+
+                        if main_activity and dexClass.name.decode() == main_activity:
+                            no_main = False
+
+        except zipfile.BadZipfile as e:
+            return ('unknown', 'Errors.', e)
+
+        if flag and no_main:
+            return ("packed.", application, main_activity)
+        else:
+            return ("nopacked.", application, main_activity)
+
+
 def main(args):
     if os.path.isdir(args.dirname):
         rootdir = args.dirname
+        if  args.m:
+            if not os.path.exists('nopacked'):
+                os.mkdir('nopacked')
+            if not os.path.exists('packed'):
+                os.mkdir('packed')
+
         for parent, dirnames, filenames in os.walk(rootdir):
             for filename in filenames:
                 filepath = os.path.join(parent, filename)
+                result = chkp(filepath)
 
-                if zipfile.is_zipfile(filepath):
-                    flag = False
-                    no_main = True
+                if args.m:
+                    dst = result[0] + os.sep + filename
+                    if dst not in filepath:
+                        shutil.move(filepath, dst)
 
-                    try:
-                        with zipfile.ZipFile(filepath, mode="r") as z:
-                            z.testzip()
-                            data = z.read("AndroidManifest.xml")
+                    if args.v:
+                        print(filepath, result[0], result[1], result[2])
+                else:
+                    print(filepath, result[0], result[1], result[2])
 
-                            axml = AXML(data)
-                            package = axml.getPackageName().replace('.', '/')
-                            application = axml.getApplicationName()
-
-                            if application is None:
-                                print(filename, "nopacked")
-                                continue
-
-                            application = axml.getApplicationName().replace('.', '/')
-
-                            if application.startswith('/'):
-                                application = package + application
-
-                            main_activity = axml.getMainActivity().replace('.', '/')
-
-                            dexs = []
-                            for name in z.namelist():
-                                if name.startswith("classes") and name.endswith(".dex"):
-                                    dexs.append(z.read(name))
-
-                            if len(dexs) == 0:
-                                print(filename, "no classes.dex")
-                                continue
-
-                            for dat in dexs:
-                                if flag:
-                                    break
-                                dexFile = parsedex.DexFile(dat)
-                                for dexClass in dexFile.classes:
-                                    if flag and no_main:
-                                        break
-                                    if dexClass.name.decode() == application:
-                                        dexClass.parseData()
-                                        for method in dexClass.data.methods:
-                                            if method.id.name.decode() == "attachBaseContext":
-                                                flag = True
-
-                                    if dexClass.name.decode() == main_activity:
-                                        no_main = False
-
-                    except zipfile.BadZipfile as e:
-                        print(filename, 'Errors.', e)
-                        continue
-
-                    if flag and no_main:
-                        if args.v:
-                            print(filename, "packed.", application, main_activity)
-                        dst = 'packed'+ os.sep + filename
-                        if args.m:
-                            if not os.path.exists('packed'):
-                                os.mkdir('packed')
-                            dst = 'packed'+ os.sep + filename
-                            if dst not in filepath:
-                                shutil.move(filepath, dst)
-                    else:
-                        if args.v:
-                            print(filename, "nopacked.", application, main_activity)
-                        if args.m:
-                            if not os.path.exists('nopacked'):
-                                os.mkdir('nopacked')
-                            dst = 'nopacked'+ os.sep + filename
-                            if dst not in filepath:
-                                shutil.move(filepath, dst)
 
 
 if __name__ == "__main__":
