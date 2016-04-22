@@ -1,0 +1,14 @@
+android.support.v13
+android.support.v4
+android.support.v7
+com.baidu.frontia
+com.baidu.loctp
+com.baidu.android.pushservice
+com.facebook.ads
+com.google.android.gms
+com.tencent.bugly
+com.umeng.analytics
+java.util
+org.apache.common.io
+org.cocos2dx
+u.aly
