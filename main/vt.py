@@ -19,6 +19,8 @@ import urllib.parse
 import hashlib
 import simplejson
 
+from libs import hashtool
+
 
 # Sending and scanning files, file size limit is 32MB.
 url_scan = "https://www.virustotal.com/vtapi/v2/file/scan"
@@ -27,19 +29,6 @@ url_rescan = "https://www.virustotal.com/vtapi/v2/file/rescan"
 # Retrieving file scan reports
 url_report = 'https://www.virustotal.com/vtapi/v2/file/report'
 
-
-def get_sha256(file):
-    sha1 = hashlib.sha256()
-    block_size = 2**8
-
-    f = open(file, 'rb')
-    while True:
-        data = f.read(block_size)
-        if not data:
-            break
-        sha1.update(data)
-
-    return sha1.hexdigest()
 
 
 def get_vt_result(resource):
@@ -71,12 +60,12 @@ def get_vt_result(resource):
 
 def main(resource):
     if os.path.isfile(resource):
-        resource = get_sha256(resource)
+        resource = hashtool.get_sha256(resource)
     elif os.path.isdir(resource):
         for parent, dirnames, filenames in os.walk(resource):
             for filename in filenames:
                 filepath = os.path.join(parent, filename)
-                resource = get_sha256(filepath)
+                resource = hashtool.get_sha256(filepath)
                 get_vt_result(resource)
     elif len(resource) not in [32, 40, 64] or not resource.isalnum():
         print(resource, "is NOT a md5/sha1/sha256 hash! Please try again.")

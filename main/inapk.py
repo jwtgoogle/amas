@@ -20,15 +20,13 @@ import os.path
 import binascii
 import sys
 from difflib import SequenceMatcher
+from time import clock
 
 from libs.enjarify import parsedex
 from libs.axmlparser.axml import AXML
 from libs import strtool
 from libs import dextool
 
-MAGIC_HEADERS = {b'504b0304': 'ZIP', b'7f454c46': 'ELF'}
-AXML_MAGIC_HEADERS = [b'03000800', b'00000800']
-DEX_MAGIC_HEADERS = [b'6465780a']
 
 is_first_axml = True
 
@@ -240,7 +238,7 @@ def get_manifest_wildcards(lists, inset):
     for item0 in list0:
         pattern = item0
         for sub_list in lists:
-            pattern = strtool.get_best_wildcard_from_list(pattern, sub_list, 2)
+            pattern = strtool.get_best_wildcard_from_list(pattern, sub_list, 3)
         if pattern and pattern != '*':
             patterns.add(pattern)
 
@@ -288,7 +286,7 @@ def in_manifest(rootdir, is_statistics, is_fuzzy=False):
         for item in pkgd.items():
             pkgs.append(item[0])
         tmp_pkg = []
-        wildcards = strtool.get_wildcards_in_list(pkgs, 1)
+        wildcards = strtool.get_wildcards_in_list(pkgs, 3)
         if len(wildcards) > 1:
             tmp_pkg.append(wildcards)
             result_dict['Package'] = tmp_pkg
@@ -398,38 +396,6 @@ def process_dex(data):
         dex_strings_inset = dex_strings_inset & tmpSet
 
 
-def get_dex_strings(dex_datas):
-    global dex_strings_inset
-
-    dex_files = []
-    try:
-        for dex_data in dex_datas:
-            dex_files.append(parsedex.DexFile(dex_data))
-    except Exception as e:
-        print(e, "'s dex can not be parsed, please report to the author.")
-        return
-
-    strs = ""
-    with open(os.path.join(sys.path[1], "cfg", 'strs.txt'), 'r', encoding='utf-8') as f:
-        strs = f.read()
-
-    tmp_set = set()
-    tmp_list = []
-    for dex_file in dex_files:
-        for i in range(dex_file.string_ids.size):
-            s = dex_file.string(i)
-            if s.decode(errors='ignore') in strs:
-                continue
-            tmp_set.add(s)
-
-    strs_list.append(tmp_set)
-
-    if len(dex_strings_inset) is 0:
-        dex_strings_inset = tmp_set
-    else:
-        dex_strings_inset = dex_strings_inset & tmp_set
-
-
 def save_cache(strs, filename):
     path = os.path.join(sys.path[1], 'cache', filename)
     with open(path, 'w', encoding='utf-8') as f:
@@ -453,23 +419,27 @@ def read_cache(filename):
         return strs
 
 
+def byteset2strlist(byte_set):
+    one = list(byte_set)
+    one.sort()
+    str_list = []
+    for a in one:
+        str_list.append(a.decode(errors='ignore'))
+
+    return str_list
+
+
 def in_dex_strings(dir, hex_flag, is_fuzzy=False):
     rootdir = dir
-    dexs_strings_list = [] # 将每一个APK的字符串集合，当作一个元素，存放在这个列表里面
+    dex_str_set_list = [] # 将每一个APK的字符串集合，当作一个元素，存放在这个列表里面
     dexs_common_strings = set()
     is_first = True
     for parent, dirnames, filenames in os.walk(rootdir):
         for filename in filenames:
             filepath = os.path.join(parent, filename)
 
-            if is_cache(filename):
-                strset = read_cache(filename)
-            else:
-                strset = dextool.get_strings(filepath)
-                save_cache(strset, filename)
-
-            dexs_strings_list.append(strset)
-            # print(len(strset), 'ok')
+            strset = dextool.get_strings(filepath)
+            dex_str_set_list.append(strset)
 
             if is_first and strset:
                 dexs_common_strings = strset
@@ -481,26 +451,40 @@ def in_dex_strings(dir, hex_flag, is_fuzzy=False):
         return (dexs_common_strings, None)
 
     str_list = []
-    dexs_strings_list_0 = dexs_strings_list[0]
-    for item in dexs_strings_list_0 - dexs_common_strings:
-        str_list.append(item.decode(errors='ignore'))
-    dexs_strings_list.remove(dexs_strings_list_0)
+    one = dex_str_set_list[0]
+    dex_str_set_list.remove(one)
 
-    wildcards_set = set(str_list)
-    for ss2 in dexs_strings_list:
-        tmp_sss = []
-        for item in ss2 - dexs_common_strings:
-            tmp_sss.append(item.decode(errors='ignore'))
+    ones = byteset2strlist(one)
+    twos = byteset2strlist(dex_str_set_list[0])
 
-        tmp = set()
-        for s1 in wildcards_set:
-            wildcards = strtool.get_best_wildcard_from_list(s1, tmp_sss, 1)
-            if len(wildcards.replace('*', '')) > 3:
-                tmp.add(wildcards)
-        wildcards_set.clear()
-        wildcards_set = tmp
+    import difflib
 
-    return (dexs_common_strings, wildcards_set)
+
+    wildcard_list = ones
+    max_num = len(dex_str_set_list)
+    count = 1
+    for item_set in dex_str_set_list:
+        item_list = byteset2strlist(item_set)
+
+        diff = difflib.ndiff(wildcard_list, item_list)
+        index = 0
+        diff_list = list(diff)
+        tmp_set = set()
+        for line in diff_list:
+            if line.startswith('?') and diff_list[index - 1].startswith('-'):
+                 word = strtool.get_wildcards(diff_list[index - 1][2:], diff_list[index + 1][2:], 3)
+                 if len(word) > 1:
+                     tmp_set.add(word)
+            elif count != max_num and line[0] not in ['?', '-', '+']:
+                tmp_set.add(line[2:])
+            index = index + 1
+
+        tmp_list = list(tmp_set)
+        tmp_list.sort()
+        wildcard_list = tmp_list
+        count = count + 1
+
+    return (dexs_common_strings, wildcard_list)
 
 
 def in_resources(rootdir, is_all):
@@ -570,6 +554,7 @@ def in_dex_opcodes(rootdir, is_fuzzy, is_object):
         rootdir  目录
         is_fuzzy 是否模糊匹配
         is_object 是否匹配父类为Object的类
+        TODO 默认全部初始化到缓存目录里面，然后，再读取
     '''
     ops_set = set()
     fuzzy_ops_set = set()
@@ -597,60 +582,83 @@ def in_dex_opcodes(rootdir, is_fuzzy, is_object):
                     result = get_opcodes(data)
                     ops_set2 = ops_set2 | get_opcodes(data)
 
-                for ops1, proto1, sup1, mtd1 in ops_set:
+                for ops1, proto1, sup1, mtd1, olen1 in ops_set:
                     if not is_object and sup1 == 'Ljava/lang/Object;':
                         continue
 
-                    for ops2, proto2, sup2, mtd2 in ops_set2:
-                        # proto一样，父类一样，opcode一样
-                        if proto1 == proto2 and sup1 == sup2 and ops1 == ops2:
-                            tmp_set.add((ops1, proto1, sup1, mtd1))
-                            break
-                        elif proto1 == proto2 and ops1 == ops2:
-                            tmp_set.add((ops1, proto1, sup1, mtd1))
-                            break
-                        elif proto1 == proto2 and ops1 in ops2 or ops2 in ops1:
-                            tmp_set.add((ops1, proto1, sup1, mtd1))
+                    if is_object and sup1 != 'Ljava/lang/Object;':
+                        continue
+
+                    best_ops = None
+                    best_sup = ''
+                    best_mtd = ''
+                    best_olen = 0
+                    best_ratio = 0
+                    flag = False
+                    for ops2, proto2, sup2, mtd2, olen2 in ops_set2:
+                        if not is_object and sup2 == 'Ljava/lang/Object;':
+                            continue
+
+                        if is_object and sup2 != 'Ljava/lang/Object;':
+                            continue
+
+                        if proto1 == proto2 and ops1 == ops2:
+                            tmp_set.add((ops1, proto1, sup1, mtd1, olen1))
+                            flag = True
                             break
 
                         if is_fuzzy:
-                            if proto1 == proto2:
+                            if proto1 == proto2 and sup1 == sup2:
                                 ratio = SequenceMatcher(None, ops1, ops2).ratio()
-                                if ratio > 0.4:
-                                    from libs import strtool
-                                    pattern = strtool.get_wildcards(ops1, ops2)
-                                    arr = pattern.split("*")
-                                    max_len = 0
-                                    for item in arr:
-                                        if max_len < len(item):
-                                            max_len = len(item)
-                                    if max_len < 10:
-                                        continue
-                                    tmp_set.add((pattern, proto1, sup1, mtd1))
-                                    break
+                                if ratio > best_ratio:
+                                    best_ratio = ratio
+                                    best_ops = ops2
+                                    best_sup = sup2
+                                    best_mtd = mtd2
+                                    best_olen = olen2
+
+                    if not flag and best_ops:
+                        max_len = (olen1 if olen1 > best_olen else best_olen)
+                        pattern = strtool.get_wildcards(ops1, best_ops, 4)
+                        if len(pattern) > 10:
+                            tmp_set.add((pattern, proto1, sup1, mtd1, max_len))
+                        best_ops = None
                 ops_set.clear()
                 ops_set = tmp_set
 
-    for ops1, proto1, sup1, mtd1 in ops_set:
-        print(ops1, proto1, sup1, mtd1)
+    op_list = []
+    fop_list = []
+    for pattern, proto, sup, mtd, max_len in ops_set:
+        if '*' not in pattern:
+            op_list.append((pattern, proto, sup, mtd, max_len))
+        else:
+            new_pattern = ''
+            for op in pattern.split("*"):
+                if not op:
+                    continue
+                if len(op) % 2 == 1:
+                    new_pattern = new_pattern + op[:-1] + '*'
+                else:
+                    new_pattern = new_pattern + op + '*'
+            fop_list.append((new_pattern, proto, sup, mtd, int(olen1/2)))
 
+    return (op_list, fop_list)
 
 def get_opcodes(data):
-    '''
-        不解析Android API相关的类
-        不解析父类为自定义类的类
-    '''
-    with open(os.path.join(sys.path[1], "cfg", 'classes.txt'), \
-            'r', encoding='utf-8') as f:
-        apis = f.read()
+    with open(os.path.join(sys.path[1], "cfg", 'classes.txt'), 'rb') as f:
+        class_list = f.readlines()
+
+    class_set = set(class_list)
 
     dexFile = parsedex.DexFile(data)
     opcode_set = set()
     for dexClass in dexFile.classes:
-        if dexClass.name.decode() in apis:
+        class_name = b'L' + dexClass.name + b';\n'
+        if class_name in class_set:
             continue
 
-        if dexClass.super.decode() not in apis:
+        super_name = b'L' + dexClass.super + b';\n'
+        if super_name not in class_set:
             continue
 
         dexClass.parseData()
@@ -674,7 +682,8 @@ def get_opcodes(data):
                          + id.name.decode() + id.desc.decode()
             proto = get_proto_string(id.return_type, id.param_types)
             super_class = 'L' + dexClass.super.decode() + ';'
-            opcode_set.add((opcodes, proto, super_class, method_sign))
+            olen = len(opcodes)
+            opcode_set.add((opcodes, proto, super_class, method_sign, olen))
 
     return opcode_set
 
@@ -735,20 +744,20 @@ def main(args):
         result = in_manifest(rootdir, True, args.f)
 
     if args.s:
-        # TODO 如果APK没有classes.dex，或者解析出错，打印出来
         result = in_dex_strings(rootdir, False, args.f)
-        print("Dex Strings:")
-        strs = list(result[0])
-        strs.sort()
-        for s in strs:
-            print(s)
+        if result[0]:
+            print("Dex Strings:")
+            strs = list(result[0])
+            strs.sort()
+            for s in strs:
+                display(s.decode(errors='ignore'))
 
         if result[1]:
             print("\nDex Fuzzy Strings:")
             strs = list(result[1])
             strs.sort()
             for s in strs:
-                print(s)
+                display(s)
 
     if args.r:
         name_set, crc_set = in_resources(rootdir, False)
@@ -760,18 +769,24 @@ def main(args):
         print('\nFiles:')
         for name in sorted(list(name_set)):
             if not name.endswith("/"):
-                print(name)
+                display(name)
 
         if len(crc_set) > 0:
             print("\nFiles CRC:")
             for name in sorted(list(crc_set)):
-                print(name)
+                display(name)
 
 
     if args.o:
         in_dex_opcodes(rootdir, args.f, False) # 精准，排除Object
     elif args.O:
         in_dex_opcodes(rootdir, args.f, True) # 精准，包含Object
+
+def display(text):
+    try:
+        print(text)
+    except Exception as e:
+        print(text.encode(errors='ignore'), e)
 
 
 if __name__ == "__main__":
@@ -789,4 +804,8 @@ if __name__ == "__main__":
     parser.add_argument('-f', action='store_true', help='open fuzzing', required=False)
 
     args = parser.parse_args()
+
+    start = clock()
     main(args)
+    finish = clock()
+    print('The time is %fs' % (finish - start))

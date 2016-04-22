@@ -15,38 +15,19 @@
 import argparse
 import os.path
 import os
-import hashlib
-import io
 
-
-def get_md5(filepath):
-    md5 = hashlib.md5()
-    f = io.FileIO(filepath, 'r')
-    bytes = f.read(1024)
-    while(bytes != b''):
-        md5.update(bytes)
-        bytes = f.read(1024)
-    f.close()
-    md = md5.hexdigest()
-
-    return md
+from libs import hashtool
 
 
 def main(arg):
     if os.path.isfile(arg):
-        print(get_md5(arg))
-        return
-
-    if os.path.isdir(arg):
+        print(hashtool.get_md5(arg))
+    elif os.path.isdir(arg):
         for parent, dirnames, filenames in os.walk(arg):
             for filename in filenames:
                 filepath = os.path.join(parent, filename)
                 lenght = len(filepath)
-                print(filepath, (50 - lenght) * ' ', get_md5(filepath))
-
-        return
-
-    print("")
+                print(filepath, (50 - lenght) * ' ', hashtool.get_md5(filepath))
 
 
 if __name__ == "__main__":
