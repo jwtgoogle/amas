@@ -29,7 +29,10 @@ with open(os.path.join(sys.path[1], "cfg", 'smali.txt'), \
     clzs = f.readlines()
 
 
-def repack(filepath):
+def repack(filepath, flag=False):
+    if flag:
+        shutil.copy(filepath, filepath + '_bak')
+
     # decode
     cmd = 'baksmali %s' % filepath
     print(cmd)
@@ -46,7 +49,7 @@ def repack(filepath):
     cmd = 'smali out'
     subprocess.call(cmd, shell=True)
     md5 = hashtool.get_md5('classes.dex')
-    cmd = 'zip %s classes.dex' % os.path.basename(filepath)
+    cmd = 'zip %s classes.dex' % filepath
     subprocess.call(cmd, shell=True)
 
     # clear
@@ -54,19 +57,21 @@ def repack(filepath):
     os.remove('classes.dex')
 
 
-def main(f):
+def main(args):
+    f = args.f
     if os.path.isfile(f):
-        repack(f)
+        repack(f, args.b)
     elif os.path.isdir(f):
         for parent, dirnames, filenames in os.walk(f):
             for filename in filenames:
                 filepath = os.path.join(parent, filename)
-                repack(filepath)
+                repack(filepath, args.b)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog='md5', description='get md5')
+        prog='repack', description='repack')
     parser.add_argument('f', help='filename or dirname')
+    parser.add_argument('-b', action='store_true', help='backup', required=False)
     args = parser.parse_args()
-    main(args.f)
+    main(args)

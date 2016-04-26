@@ -166,8 +166,7 @@ def process_axml(data):
     permissions = axml.getUsesPermissions()
     tmp_p = set()
     for p in permissions:
-        # 1、 仅计算 android.permission
-        if 'android.permission' in p:
+        if p.startswith('android.permission'):
             tmp_p.add(p)
     perm_num = len(tmp_p)
 
@@ -554,7 +553,6 @@ def in_dex_opcodes(rootdir, is_fuzzy, is_object):
         rootdir  目录
         is_fuzzy 是否模糊匹配
         is_object 是否匹配父类为Object的类
-        TODO 默认全部初始化到缓存目录里面，然后，再读取
     '''
     ops_set = set()
     fuzzy_ops_set = set()
@@ -582,6 +580,7 @@ def in_dex_opcodes(rootdir, is_fuzzy, is_object):
                     result = get_opcodes(data)
                     ops_set2 = ops_set2 | get_opcodes(data)
 
+
                 for ops1, proto1, sup1, mtd1, olen1 in ops_set:
                     if not is_object and sup1 == 'Ljava/lang/Object;':
                         continue
@@ -602,7 +601,8 @@ def in_dex_opcodes(rootdir, is_fuzzy, is_object):
                         if is_object and sup2 != 'Ljava/lang/Object;':
                             continue
 
-                        if proto1 == proto2 and ops1 == ops2:
+                        # super, proto, {method, option}, opcodes
+                        if proto1 == proto2 and ops1 == ops2 and sup1 == sup2:
                             tmp_set.add((ops1, proto1, sup1, mtd1, olen1))
                             flag = True
                             break
@@ -613,16 +613,25 @@ def in_dex_opcodes(rootdir, is_fuzzy, is_object):
                                 if ratio > best_ratio:
                                     best_ratio = ratio
                                     best_ops = ops2
-                                    best_sup = sup2
-                                    best_mtd = mtd2
+                                    # best_sup = sup2
+                                    # best_mtd = mtd2
                                     best_olen = olen2
 
-                    if not flag and best_ops:
+                    if not flag and is_fuzzy and best_ops:
+                        # print(proto1, sup1, mtd1, olen1)
+                        # print(proto1, sup1, mtd1, best_olen)
                         max_len = (olen1 if olen1 > best_olen else best_olen)
+                        # print(olen1, best_olen, max_len)
                         pattern = strtool.get_wildcards(ops1, best_ops, 4)
                         if len(pattern) > 10:
                             tmp_set.add((pattern, proto1, sup1, mtd1, max_len))
+
+                        # print((pattern, proto1, sup1, mtd1, max_len))
                         best_ops = None
+                        best_sup = ''
+                        best_mtd = ''
+                        best_olen = 0
+                        best_ratio = 0
                 ops_set.clear()
                 ops_set = tmp_set
 
@@ -640,7 +649,7 @@ def in_dex_opcodes(rootdir, is_fuzzy, is_object):
                     new_pattern = new_pattern + op[:-1] + '*'
                 else:
                     new_pattern = new_pattern + op + '*'
-            fop_list.append((new_pattern, proto, sup, mtd, int(olen1/2)))
+            fop_list.append((new_pattern, proto, sup, mtd, int(max_len/2)))
 
     return (op_list, fop_list)
 

@@ -16,4 +16,4 @@ REM  limitations under the License.
 
 set BAT_PATH=%~dp0
 set PYTHONPATH=%BAT_PATH:~0,-5%
-python -O -m enjarify.main %*
+python -O -m libs.enjarify.main %*

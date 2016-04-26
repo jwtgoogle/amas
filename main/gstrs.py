@@ -11,6 +11,8 @@ from libs import dextool
 
 def list_strs(filepath):
     strset = dextool.get_strings(filepath)
+    if not strset:
+        return
     strlist = list(strset)
     strlist.sort()
     for s in strlist:
@@ -42,4 +44,4 @@ if __name__ == "__main__":
     start = clock()
     main(args.f)
     finish = clock()
-    print('The costing time is %fs' % (finish - start))
+    print('%fs' % (finish - start))

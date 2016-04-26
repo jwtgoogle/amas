@@ -1,6 +1,8 @@
 import zipfile
 import os
 import sys
+import binascii
+import io
 
 from libs.enjarify import parsedex
 
@@ -10,7 +12,6 @@ def is_dex(filepath):
         with open(filepath, mode='rb') as f:
             data = f.read()
 
-            import binascii
             magic_number = binascii.hexlify(data[:4])
             if magic_number == DEX_MAGIC_HEADER:
                 return data
@@ -19,18 +20,32 @@ def is_dex(filepath):
 
     return None
 
+
+
 def get_strings(filepath, is_filter=True):
+    ZIP_MAGIC_HEADER = b'504b0304'
     dex_datas = []
     if zipfile.is_zipfile(filepath):
         try:
             with zipfile.ZipFile(filepath, 'r') as z:
                 for name in z.namelist():
+                    data = z.read(name)
                     if name.startswith('classes') and name.endswith('.dex'):
-                        dex_datas.append(z.read(name))
+                        dex_datas.append(data)
+                    else:
+                        magic_number = binascii.hexlify(data[:4])
+                        if ZIP_MAGIC_HEADER == magic_number:
+                            sub_data = io.BytesIO(data)
+                            with zipfile.ZipFile(sub_data, 'r') as sub_z:
+                                for sname in sub_z.namelist():
+                                    if sname.startswith('classes') and sname.endswith('.dex'):
+                                        print('Note:', filepath, 'contains subapk ', name)
+                                        data = sub_z.read(sname)
+                                        dex_datas.append(data)
+
         except Exception as e:
             print(filepath, e)
             return
-
     else:
         data = is_dex(filepath)
         if data:

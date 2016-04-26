@@ -77,10 +77,12 @@ def chkp(filepath):
         except zipfile.BadZipfile as e:
             return ('unknown', 'Errors.', e)
 
-        if flag and no_main:
+        if flag or no_main:
             return ("packed.", application, main_activity)
         else:
             return ("nopacked.", application, main_activity)
+    else:
+        return ('unknown', 'Errors.', 'not a zipfile')
 
 
 def main(args):
@@ -106,7 +108,6 @@ def main(args):
                         print(filepath, result[0], result[1], result[2])
                 else:
                     print(filepath, result[0], result[1], result[2])
-
 
 
 if __name__ == "__main__":
