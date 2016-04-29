@@ -217,19 +217,6 @@ def process_axml(data):
         inservs = inservs & s_set
 
 
-def get_dex_datas(file_path):
-    dex_datas = []
-    if zipfile.is_zipfile(file_path):
-        try:
-            with zipfile.ZipFile(file_path, 'r') as z:
-                for name in z.namelist():
-                    if name.startswith('classes') and name.endswith('.dex'):
-                        dex_datas.append(z.read(name))
-        except zipfile.BadZipfile as e:
-            print(file_path, e)
-    return dex_datas
-
-
 def get_manifest_wildcards(lists, inset):
     list0 = lists[0]
     lists.remove(list0)
@@ -561,7 +548,7 @@ def in_dex_opcodes(rootdir, is_fuzzy, is_object):
     for parent, dirnames, filenames in os.walk(rootdir):
         for filename in filenames:
             filepath = os.path.join(parent, filename)
-            dexs = get_dex_datas(filepath)
+            dexs = dextool.get_dex_datas(filepath)
 
             if len(dexs) == 0:
                 continue

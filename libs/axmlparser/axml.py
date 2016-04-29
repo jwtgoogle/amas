@@ -128,19 +128,19 @@ class AXML:
                         name = self.parser.getAttributeName(i)
                         value = self._escape(self.getAttributeValue(i))
                         self.content[name] = value
-                elif "uses-permission" == tag:
-                    for i in range(0, int(self.parser.getAttributeCount())):
-                        name = self.parser.getAttributeName(i)
-                        value = self._escape(self.getAttributeValue(i))
-                        if name == "name":
-                            self.uses_permissions.add(value)
-                            break
                 elif "permission" == tag:
                     for i in range(0, int(self.parser.getAttributeCount())):
                         name = self.parser.getAttributeName(i)
                         value = self._escape(self.getAttributeValue(i))
                         if name == "name":
                             self.permissions.add(value)
+                            break
+                elif "permission" in tag:
+                    for i in range(0, int(self.parser.getAttributeCount())):
+                        name = self.parser.getAttributeName(i)
+                        value = self._escape(self.getAttributeValue(i))
+                        if name == "name":
+                            self.uses_permissions.add(value)
                             break
                 elif tag == "application":
                     for i in range(0, int(self.parser.getAttributeCount())):
@@ -149,7 +149,7 @@ class AXML:
                         if name == "name":
                             self.content["application"] = value
                             break
-                elif tag == "activity":
+                elif "activity" in tag:
                     whichTag = ACT
                     for i in range(0, int(self.parser.getAttributeCount())):
                         name = self.parser.getAttributeName(i)
@@ -157,7 +157,7 @@ class AXML:
                         if name == "name":
                             tagName = value
                             self.activities.append(value)
-                elif tag == "receiver":
+                elif "receiver" in tag:
                     whichTag = REV
                     for i in range(0, int(self.parser.getAttributeCount())):
                         name = self.parser.getAttributeName(i)
@@ -165,7 +165,7 @@ class AXML:
                         if name == "name":
                             tagName = value
                             break
-                elif tag == "service":
+                elif "service" in tag:
                     whichTag = SER
                     for i in range(0, int(self.parser.getAttributeCount())):
                         name = self.parser.getAttributeName(i)
@@ -173,7 +173,7 @@ class AXML:
                         if name == "name":
                             tagName = value
                             break
-                elif tag == "action":
+                elif "action" in tag:
                     if whichTag == ACT:
                         for i in range(0, int(self.parser.getAttributeCount())):
                             name = self.parser.getAttributeName(i)
@@ -190,7 +190,7 @@ class AXML:
                                 action_list.append(value)
                                 self.actions.add(value)
                                 break
-                elif tag == 'category':
+                elif 'category' in tag:
                     if whichTag == ACT:
                         for i in range(0, int(self.parser.getAttributeCount())):
                             value = self._escape(self.getAttributeValue(i))

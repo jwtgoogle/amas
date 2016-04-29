@@ -6,8 +6,11 @@ import io
 
 from libs.enjarify import parsedex
 
+ZIP_MAGIC_HEADER = b'504b0304'
+DEX_MAGIC_HEADER = b'6465780a'
+
+
 def is_dex(filepath):
-    DEX_MAGIC_HEADER = b'6465780a'
     try:
         with open(filepath, mode='rb') as f:
             data = f.read()
@@ -21,9 +24,7 @@ def is_dex(filepath):
     return None
 
 
-
-def get_strings(filepath, is_filter=True):
-    ZIP_MAGIC_HEADER = b'504b0304'
+def get_dex_datas(filepath):
     dex_datas = []
     if zipfile.is_zipfile(filepath):
         try:
@@ -50,6 +51,12 @@ def get_strings(filepath, is_filter=True):
         data = is_dex(filepath)
         if data:
             dex_datas.append(data)
+
+    return dex_datas
+
+
+def get_strings(filepath, is_filter=True):
+    dex_datas = get_dex_datas(filepath)
 
     dex_files = []
     try:

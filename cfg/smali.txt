@@ -1,3 +1,4 @@
+org.hibernate
 android.support.v13
 android.support.v4
 android.support.v7
@@ -12,11 +13,16 @@ com.baidu.android.pushservice
 com.baidu.frontia
 com.baidu.loctp
 com.casee.adsdk
+com.loopj.android.http
 com.energysource.szj
+com.ryg.dynamicload
+com.ryg.utils
 com.facebook.ads
 com.google.ads
-com.umeng.update
+com.umeng
 com.google.android.gms
+com.tencent.smtt
+com.tencent.tbs
 com.madhouse.android.ads
 com.millennialmedia.android
 com.mobclick.android.
@@ -27,6 +33,7 @@ com.vpon.adon.android
 com.wiyun.ad
 com.wooboo
 com.wqmobile.sdk
+com.nostra13.universalimageloader
 com.google.gson
 java.util
 net.youmi.android
