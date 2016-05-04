@@ -1,3 +1,5 @@
+com.amazonaws
+com.jgoodies.common
 org.hibernate
 android.support.v13
 android.support.v4
