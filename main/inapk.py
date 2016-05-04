@@ -20,6 +20,7 @@ import os.path
 import binascii
 import sys
 from difflib import SequenceMatcher
+import difflib
 from time import clock
 
 from libs.enjarify import parsedex
@@ -443,9 +444,6 @@ def in_dex_strings(dir, hex_flag, is_fuzzy=False):
     ones = byteset2strlist(one)
     twos = byteset2strlist(dex_str_set_list[0])
 
-    import difflib
-
-
     wildcard_list = ones
     max_num = len(dex_str_set_list)
     count = 1
@@ -640,6 +638,7 @@ def in_dex_opcodes(rootdir, is_fuzzy, is_object):
 
     return (op_list, fop_list)
 
+
 def get_opcodes(data):
     with open(os.path.join(sys.path[1], "cfg", 'classes.txt'), 'rb') as f:
         class_list = f.readlines()
@@ -698,6 +697,44 @@ def get_proto_string(return_type, param_types):
             ps = ps + p
 
     return r + ps
+
+
+def in_elf_strings(rootdir, fuzzy):
+    from libs import elftool
+    strs = []
+    is_first = True
+    for parent, dirnames, filenames in os.walk(rootdir):
+        for filename in filenames:
+            filepath = os.path.join(parent, filename)
+            rodata_strs = elftool.get_rodata_strings(filepath)
+            if rodata_strs:
+                if is_first:
+                    base_strs = rodata_strs
+                    is_first = False
+                else:
+                    strs.append(rodata_strs)
+
+    count = 1
+    max_num = len(base_strs)
+    for rodata_strs in strs:
+        tmp_list = []
+        diff = difflib.ndiff(base_strs, rodata_strs)
+
+        index = 0
+        diff_list = list(diff)
+        tmp_set = set()
+        for line in diff_list:
+            if fuzzy and line.startswith('?') and diff_list[index - 1].startswith('-'):
+                 word = strtool.get_wildcards(diff_list[index - 1][2:], diff_list[index + 1][2:], 3)
+                 if len(word) > 1:
+                     tmp_set.append(word)
+            elif count != max_num and line[0] not in ['?', '-', '+']:
+                tmp_list.append(line[2:])
+
+        base_strs = tmp_list
+
+    return base_strs
+
 
 
 def main(args):
@@ -778,11 +815,24 @@ def main(args):
     elif args.O:
         in_dex_opcodes(rootdir, args.f, True) # 精准，包含Object
 
+    if args.e:
+        base_strs = in_elf_strings(rootdir, args.f)
+        for s in base_strs:
+            if len(s) < 7:
+                continue
+            try:
+                print(s, binascii.a2b_hex(s).decode(errors='ignore'))
+            except UnicodeEncodeError:
+                pass
+
+
+
 def display(text):
     try:
         print(text)
     except Exception as e:
         print(text.encode(errors='ignore'), e)
+
 
 
 if __name__ == "__main__":
@@ -798,6 +848,7 @@ if __name__ == "__main__":
     parser.add_argument('-o', action='store_true', help='dex opcodes, precise matching and not suport java/lang/Object.', required=False)
     parser.add_argument('-O', action='store_true', help='dex opcodes, precise matching all classes.', required=False)
     parser.add_argument('-f', action='store_true', help='open fuzzing', required=False)
+    parser.add_argument('-e', action='store_true', help='elf strings', required=False)
 
     args = parser.parse_args()
 
