@@ -4,6 +4,21 @@ from libs.pyelftools.common.exceptions import ELFError
 from libs.pyelftools.common.py3compat import (ifilter, byte2int, bytes2str, itervalues, str2bytes)
 
 
+def is_elf(filepath):
+    ELF_MAGIC_HEADER = b'7f454c46'
+    try:
+        with open(filepath, mode='rb') as f:
+            data = f.read()
+
+            magic_number = binascii.hexlify(data[:4])
+            if magic_number == ELF_MAGIC_HEADER:
+                return data
+    except Exception as e:
+        print(filepath, e)
+
+    return None
+
+
 def get_strings(filepath):
     pass
 
